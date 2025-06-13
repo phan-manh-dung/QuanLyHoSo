@@ -52,7 +52,7 @@ function SortableHeader({ column }: { column: ColumnType }) {
       style={style}
       {...attributes}
       {...listeners}
-      className="px-3 py-2 font-bold border bg-blue-100 cursor-move"
+      className="px-3 py-2 font-bold border bg-blue-100 sticky top-0 z-10 cursor-move"
     >
       {column.label}
     </th>
@@ -61,13 +61,15 @@ function SortableHeader({ column }: { column: ColumnType }) {
 
 export default function HomePage() {
   const [columns, setColumns] = useState<ColumnType[]>([]);
-  console.log('columns', columns);
   const [newColumnName, setNewColumnName] = useState('');
   const [showInput, setShowInput] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dataColumn, setDataColumn] = useState<DataRow[]>([]);
-  console.log('dataColumn', dataColumn);
+  const [dataRowDB, setDataRowDB] = useState<[]>([]);
+  const rowsToDisplay = [...dataRowDB, ...dataColumn];
+
+
 
   // Lấy dữ liệu cột từ API khi component mount
   useEffect(() => {
@@ -91,6 +93,34 @@ export default function HomePage() {
     };
 
     fetchColumns();
+  }, []);
+
+  // lấy dữ liệu cột từ API khi component mount
+  useEffect(() => {
+    const fetchDataRows = async () => {
+      try {
+        const res = await fetch('/api/upload');
+        const data = await res.json();
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const flattened = data.map((item: any) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const flatRow: Record<string, any> = {};
+
+          for (const [key, value] of Object.entries(item.values || {})) {
+            flatRow[key] = value;
+          }
+
+          return flatRow;
+        });
+
+        setDataRowDB(flattened);
+      } catch (error) {
+        console.error('Failed to fetch columns:', error);
+      }
+    };
+
+    fetchDataRows();
   }, []);
 
   // Chuyển đổi ngày từ định dạng Excel sang định dạng JS Date
@@ -178,10 +208,13 @@ export default function HomePage() {
     );
 
     // Tạo mảng object với key là col.label và value là rỗng
-    const sampleRow: Record<string, string> = visibleColumns.reduce((acc, col) => {
-      acc[col.label] = '';
-      return acc;
-    }, {} as Record<string, string>);
+    const sampleRow: Record<string, string> = visibleColumns.reduce(
+      (acc, col) => {
+        acc[col.label] = '';
+        return acc;
+      },
+      {} as Record<string, string>
+    );
 
     const worksheetData = [sampleRow]; // chỉ 1 dòng làm mẫu
 
@@ -211,98 +244,100 @@ export default function HomePage() {
   };
 
   // Hàm upload file Excel
-const handleFileUpload = async () => {
-  if (!file) {
-    toast('Vui lòng chọn một file Excel');
-    return;
-  }
-
-  const reader = new FileReader();
-
-  reader.onload = async (e) => {
-    const data = e.target?.result;
-    const workbook = XLSX.read(data, { type: 'binary' });
-
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
-    const json = XLSX.utils.sheet_to_json(worksheet) as ExcelRow[];
-
-    // Không cần thêm 
-    const jsonWithId = json.map((item) => ({
-      ...item,
-    }));
-
-    // Tạo map label sang id từ columns
-    const labelToIdMap = columns.reduce((acc, col) => {
-      acc[col.label] = col.id;
-      return acc;
-    }, {} as Record<string, string>);
-
-    // Map key dữ liệu theo labelToIdMap, không tạo 
-    const jsonWithMappedKeys = jsonWithId.map((row) => {
-      const newRow: Record<string, string | number> = {};
-
-      for (const key in row) {
-        const mappedKey = labelToIdMap[key] ?? key;
-        let value = row[key];
-        if (mappedKey === 'ngay-tao' && typeof value === 'number') {
-          value = excelDateToJSDate(value);
-        }
-        newRow[mappedKey] = value;
-      }
-
-      return newRow;
-    });
-
-    try {
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(jsonWithMappedKeys),
-      });
-
-      const result = await res.json() as ApiResponseItem[];
-
-      // Không dùng  nữa, flatten data như sau:
-      const flattened = result.map((item) => {
-        const flatRow: Record<string, string | number | null> = {};
-
-        for (const [key, value] of Object.entries(item.values || {})) {
-          flatRow[key] = value;
-        }
-
-        return flatRow;
-      });
-
-      setDataColumn(flattened);
-
-      if (res.ok) {
-        toast.success('Tải dữ liệu thành công!');
-        if (fileInputRef.current) {
-          fileInputRef.current.value = ''; // reset file input
-        }
-        setFile(null);
-      } else {
-        console.error('Lỗi khi tải lên:', result);
-        toast.error('Tải dữ liệu thất bại');
-      }
-    } catch (error) {
-      console.error('Lỗi hệ thống:', error);
-      toast.error('Lỗi hệ thống xảy ra');
+  const handleFileUpload = async () => {
+    if (!file) {
+      toast('Vui lòng chọn một file Excel');
+      return;
     }
+
+    const reader = new FileReader();
+
+    reader.onload = async (e) => {
+      const data = e.target?.result;
+      const workbook = XLSX.read(data, { type: 'binary' });
+
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const json = XLSX.utils.sheet_to_json(worksheet) as ExcelRow[];
+
+      // Không cần thêm
+      const jsonWithId = json.map((item) => ({
+        ...item,
+      }));
+
+      // Tạo map label sang id từ columns
+      const labelToIdMap = columns.reduce(
+        (acc, col) => {
+          acc[col.label] = col.id;
+          return acc;
+        },
+        {} as Record<string, string>
+      );
+
+      // Map key dữ liệu theo labelToIdMap, không tạo
+      const jsonWithMappedKeys = jsonWithId.map((row) => {
+        const newRow: Record<string, string | number> = {};
+
+        for (const key in row) {
+          const mappedKey = labelToIdMap[key] ?? key;
+          let value = row[key];
+          if (mappedKey === 'ngay-tao' && typeof value === 'number') {
+            value = excelDateToJSDate(value);
+          }
+          newRow[mappedKey] = value;
+        }
+
+        return newRow;
+      });
+
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(jsonWithMappedKeys),
+        });
+
+        const result = (await res.json()) as ApiResponseItem[];
+
+        // Không dùng  nữa, flatten data như sau:
+        const flattened = result.map((item) => {
+          const flatRow: Record<string, string | number | null> = {};
+
+          for (const [key, value] of Object.entries(item.values || {})) {
+            flatRow[key] = value;
+          }
+
+          return flatRow;
+        });
+
+        setDataColumn(flattened)
+
+        if (res.ok) {
+          toast.success('Tải dữ liệu thành công!');
+          if (fileInputRef.current) {
+            fileInputRef.current.value = ''; // reset file input
+          }
+          setFile(null);
+        } else {
+          console.error('Lỗi khi tải lên:', result);
+          toast.error('Tải dữ liệu thất bại');
+        }
+      } catch (error) {
+        console.error('Lỗi hệ thống:', error);
+        toast.error('Lỗi hệ thống xảy ra');
+      }
+    };
+
+    reader.readAsBinaryString(file);
   };
 
-  reader.readAsBinaryString(file);
-};
-
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8 px-2 md:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-4 px-2 md:px-8">
       <div className="mx-auto">
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b pb-4 mb-6">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b pb-4 mb-3">
           <h1 className="text-4xl font-extrabold text-gray-800 mb-2 md:mb-0">
             Task Tracker
           </h1>
@@ -318,8 +353,44 @@ const handleFileUpload = async () => {
           </div>
         </div>
 
+         {/* Add New Column */}
+        {showInput ? (
+          <div className="flex items-center justify-end gap-2">
+            <input
+              value={newColumnName}
+              onChange={(e) => setNewColumnName(e.target.value)}
+              placeholder="Tên cột"
+              className="px-2 py-1 border rounded"
+            />
+            <button
+              onClick={handleAddColumn}
+              className="bg-blue-600 text-white px-3 rounded hover:bg-blue-700 cursor-pointer"
+            >
+              OK
+            </button>
+            <button
+              onClick={() => {
+                setShowInput(false);
+                setNewColumnName('');
+              }}
+              className="bg-gray-400 text-white px-3 rounded hover:bg-gray-500 cursor-pointer"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-end gap-2">
+            <button
+              onClick={() => setShowInput(true)}
+              className="text-blue-600 hover:underline font-medium text-base cursor-pointer"
+            >
+              + Thêm cột mới vào bảng
+            </button>
+          </div>
+        )}
+
         {/* Table */}
-        <div className="overflow-x-auto mt-4 rounded-lg shadow bg-white">
+        <div className="overflow-x-auto max-h-[64vh] overflow-y-auto mt-1 rounded-lg shadow bg-white custom-scrollbar">
           <table className="min-w-full text-sm text-left">
             <thead>
               <DndContext
@@ -335,7 +406,7 @@ const handleFileUpload = async () => {
                       column.id === 'actions' ? (
                         <th
                           key={column.id}
-                          className="px-3 py-2 font-bold border bg-blue-100"
+                          className="px-3 py-2 font-bold border bg-blue-100 sticky top-0 z-10"
                         >
                           {column.label}
                         </th>
@@ -348,70 +419,39 @@ const handleFileUpload = async () => {
               </DndContext>
             </thead>
             <tbody>
-              {dataColumn.map((row, rowIndex) => (
-                <tr key={rowIndex}>
-                  {columns.map((col) =>
-                    col.id === 'actions' ? (
-                      <td key={col.id} className="border px-3 py-2 flex gap-2">
-                        <button className="text-red-600 hover:underline cursor-pointer">
-                          Delete
-                        </button>
-                        <button className="text-blue-600 hover:underline cursor-pointer">
-                          Detail
-                        </button>
-                      </td>
-                    ) : (
-                      <td
-                        key={col.id}
-                        className="border px-3 py-2 text-gray-500"
-                      >
-                        {col.id === 'id'
-                          ? rowIndex + 1
-                          : (row[col.id as keyof typeof row] ?? 'null')}
-                      </td>
-                    )
-                  )}
-                </tr>
-              ))}
+              {rowsToDisplay.map(
+                (row, rowIndex) => (
+                  <tr key={rowIndex}>
+                    {columns.map((col) =>
+                      col.id === 'actions' ? (
+                        <td
+                          key={col.id}
+                          className="border px-3 py-2 flex gap-2"
+                        >
+                          <button className="text-red-600 hover:underline cursor-pointer">
+                            Delete
+                          </button>
+                          <button className="text-blue-600 hover:underline cursor-pointer">
+                            Detail
+                          </button>
+                        </td>
+                      ) : (
+                        <td
+                          key={col.id}
+                          className="border px-3 py-2 text-gray-500 "
+                        >
+                          {col.id === 'id'
+                            ? rowIndex + 1
+                            : (row[col.id as keyof typeof row] ?? 'null')}
+                        </td>
+                      )
+                    )}
+                  </tr>
+                )
+              )}
             </tbody>
           </table>
         </div>
-
-        {/* Add New Column */}
-        {showInput ? (
-          <div className="flex items-center justify-end gap-2 py-3">
-            <input
-              value={newColumnName}
-              onChange={(e) => setNewColumnName(e.target.value)}
-              placeholder="Tên cột"
-              className="px-2 py-1 border rounded"
-            />
-            <button
-              onClick={handleAddColumn}
-              className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 cursor-pointer"
-            >
-              OK
-            </button>
-            <button
-              onClick={() => {
-                setShowInput(false);
-                setNewColumnName('');
-              }}
-              className="bg-gray-400 text-white px-3 py-1 rounded hover:bg-gray-500 cursor-pointer"
-            >
-              Cancel
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center justify-end gap-2 py-3">
-            <button
-              onClick={() => setShowInput(true)}
-              className="text-blue-600 hover:underline font-medium text-base cursor-pointer"
-            >
-              + Thêm cột mới vào bảng
-            </button>
-          </div>
-        )}
 
         <div className="fixed bottom-4 left-0 w-full flex flex-col md:flex-row md:items-center gap-4 justify-between px-10 ">
           {/* Upload & Export */}

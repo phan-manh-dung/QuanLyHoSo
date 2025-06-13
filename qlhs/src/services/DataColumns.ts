@@ -16,3 +16,9 @@ export async function insertRows(data: any[]) {
   const inserted = await DataColumn.insertMany(rowsToInsert);
   return inserted;
 }
+
+// get data for columns
+export async function getAllData() {
+  const columns = await DataColumn.find();
+  return columns;
+}
