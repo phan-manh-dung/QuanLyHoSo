@@ -1,5 +1,6 @@
 import * as dataService from '../services/DataColumns';
 import { Schema } from 'mongoose';
+import { deleteRow } from '../services/DataColumns';
 
 interface ColumnData {
   id: string;
@@ -43,6 +44,28 @@ export async function getDataRow(): Promise<ApiResponse<ColumnData[] | ErrorResp
   try {
     const columns = await dataService.getAllData();
     return { status: 200, body: columns };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Internal Server Error';
+    return {
+      status: 500,
+      body: { message: errorMessage },
+    };
+  }
+}
+
+// xóa row
+export async function deleteRowController(
+  id: string
+): Promise<ApiResponse<SuccessResponse | ErrorResponse>> {
+  try {
+    const deletedRow = await deleteRow(id);
+    return {
+      status: 200,
+      body: {
+        message: 'Row deleted successfully',
+        deletedRow,
+      },
+    };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Internal Server Error';
     return {

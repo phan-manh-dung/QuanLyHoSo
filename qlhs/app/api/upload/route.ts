@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { insertRows } from '../../../src/services/DataColumns';
 import { getDataRow } from '../../../src/controllers/DataColumns';
-import { connectToDatabase } from '../../../src/configs/db';
 
 export async function POST(req: Request) {
   try {
@@ -16,7 +15,11 @@ export async function POST(req: Request) {
 
 // GET - Lấy danh sách tất cả data của cột
 export async function GET() {
-  await connectToDatabase();
-  const { status, body } = await getDataRow();
-  return NextResponse.json(body, { status });
+  try {
+    const result = await getDataRow();
+    return NextResponse.json(result.body, { status: result.status });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    return NextResponse.json({ message: errorMessage }, { status: 500 });
+  }
 }

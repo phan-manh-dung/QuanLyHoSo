@@ -52,3 +52,16 @@ export async function getAllData() {
   const columns = await DataColumn.find();
   return columns;
 }
+
+// delete a specific row by ID
+export async function deleteRow(id: string) {
+  await connectToDatabase();
+  
+  const deletedRow = await DataColumn.findByIdAndDelete(id);
+  
+  if (!deletedRow) {
+    throw new Error('Row not found');
+  }
+  
+  return deletedRow;
+}

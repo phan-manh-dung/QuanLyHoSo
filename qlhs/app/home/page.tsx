@@ -25,7 +25,8 @@ interface ColumnType {
 
 // Type for data row
 interface DataRow {
-  [key: string]: string | number | null;
+  _id?: string;
+  [key: string]: string | number | null | Date | undefined;
 }
 
 // Type for Excel row
@@ -35,6 +36,7 @@ interface ExcelRow {
 
 // Type for API response item
 interface ApiResponseItem {
+  _id: string;
   values: Record<string, string | number | null | Date>; // Xác định các kiểu giá trị có thể
 }
 
@@ -66,11 +68,14 @@ export default function HomePage() {
   const [newColumnName, setNewColumnName] = useState('');
   const [showInput, setShowInput] = useState(false);
   const [file, setFile] = useState<File | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [dataColumn, setDataColumn] = useState<DataRow[]>([]);
-  const [dataRowDB, setDataRowDB] = useState<[]>([]);
+  const [dataRowDB, setDataRowDB] = useState<DataRow[]>([]);
+  const [searchColumn, setSearchColumn] = useState<string>('');
+  const [searchValue, setSearchValue] = useState<string>('');
+  const [filteredRows, setFilteredRows] = useState<DataRow[] | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const rowsToDisplay = [...dataRowDB, ...dataColumn];
-
+  
   // Khi render header và dữ liệu, sắp xếp lại columns để actions lên đầu
   const orderedColumns = React.useMemo(() => {
     const actionsCol = columns.find((col) => col.id === 'actions');
@@ -104,26 +109,6 @@ export default function HomePage() {
 
   // lấy dữ liệu cột từ API khi component mount
   useEffect(() => {
-    const fetchDataRows = async () => {
-      try {
-        const res = await fetch('/api/upload');
-        const data = await res.json();
-        const flattened = data.map((item: ApiResponseItem) => {
-          const flatRow: Record<string, string | number | null | Date> = {};
-
-          for (const [key, value] of Object.entries(item.values || {})) {
-            flatRow[key] = value;
-          }
-
-          return flatRow;
-        });
-
-        setDataRowDB(flattened);
-      } catch (error) {
-        console.error('Failed to fetch columns:', error);
-      }
-    };
-
     fetchDataRows();
   }, []);
 
@@ -314,9 +299,11 @@ export default function HomePage() {
         // Nếu thành công, flatten data như cũ
         const flattened = (result.inserted || []).map(
           (item: ApiResponseItem) => {
-            const flatRow: Record<string, string | number | null> = {};
+            const flatRow: DataRow = {
+              _id: item._id,
+            };
             for (const [key, value] of Object.entries(item.values || {})) {
-              flatRow[key] = value as string | number | null;
+              flatRow[key] = value;
             }
             return flatRow;
           }
@@ -340,18 +327,34 @@ export default function HomePage() {
   // Hàm export dữ liệu bảng ra Excel (loại trừ cột AT)
   const handleExportToExcel = () => {
     // Hỏi tên file
-    const fileName = window.prompt('Nhập tên file muốn tải xuống (không cần .xlsx):', 'data-table');
+    const fileName = window.prompt(
+      'Nhập tên file muốn tải xuống (không cần .xlsx):',
+      'data-table'
+    );
     if (fileName === null) return; // Người dùng bấm Cancel
 
-    const exportColumns = columns.filter(col => col.id !== 'actions' && col.label !== 'AT');
+    const exportColumns = columns.filter(
+      (col) => col.id !== 'actions' && col.label !== 'AT'
+    );
     const exportData = rowsToDisplay.map((row, idx) => {
       const obj: Record<string, string | number | null> = {};
-      obj['id'] = idx + 1; // Thêm cột id tự tăng
-      exportColumns.forEach(col => {
-        obj[col.label] = row[col.id] ?? '';
+
+      exportColumns.forEach((col) => {
+        if (col.id === 'stt') {
+          obj[col.label] = idx + 1;
+        } else {
+          const value = row[col.id];
+          if (value instanceof Date) {
+            obj[col.label] = value.toLocaleDateString('vi-VN');
+          } else {
+            obj[col.label] = value ?? '';
+          }
+        }
       });
+
       return obj;
     });
+
     const worksheet = XLSX.utils.json_to_sheet(exportData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Data');
@@ -363,114 +366,203 @@ export default function HomePage() {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8',
     });
     // Nếu người dùng không nhập gì, dùng tên mặc định
-    const finalName = fileName && fileName.trim() !== '' ? fileName.trim() + '.xlsx' : 'data-table.xlsx';
+    const finalName =
+      fileName && fileName.trim() !== ''
+        ? fileName.trim() + '.xlsx'
+        : 'data-table.xlsx';
     saveAs(fileBlob, finalName);
+  };
+
+  // Hàm xử lý tìm kiếm
+  const handleSearch = () => {
+    if (!searchColumn || !searchValue) return;
+    const filtered = rowsToDisplay.filter((row) => {
+      const value = row[searchColumn];
+      return (
+        value !== undefined &&
+        value !== null &&
+        value.toString().toLowerCase().includes(searchValue.toLowerCase())
+      );
+    });
+    setFilteredRows(filtered);
+  };
+
+  // Hàm hủy tìm kiếm
+  const handleCancelSearch = () => {
+    setFilteredRows(null);
+    setSearchColumn('');
+    setSearchValue('');
+  };
+
+    // Hàm fetch dữ liệu từ database (tách riêng để có thể gọi lại)
+  const fetchDataRows = async () => {
+    try {
+      const res = await fetch('/api/upload');
+      const data = await res.json();
+      const flattened = data.map((item: ApiResponseItem) => {
+        const flatRow: DataRow = {
+          _id: item._id,
+        };
+
+        for (const [key, value] of Object.entries(item.values || {})) {
+          flatRow[key] = value;
+        }
+
+        return flatRow;
+      });
+
+      setDataRowDB(flattened);
+    } catch (error) {
+      console.error('Failed to fetch data rows:', error);
+    }
+  };
+
+  // Hàm xóa dòng
+  const handleDeleteRow = async (rowId: string) => {
+    const confirmed = window.confirm('Bạn có chắc chắn muốn xóa dòng này không?');
+    
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/upload/${rowId}`, {
+        method: 'DELETE',
+      });
+
+      const result = await res.json();
+
+      if (res.ok) {
+        toast.success('Xóa dòng thành công!');
+        
+        // Load lại dữ liệu từ database sau khi xóa thành công
+        await fetchDataRows();
+        
+        // Clear dataColumn vì dữ liệu mới upload sẽ được load lại
+        setDataColumn([]);
+      } else {
+        toast.error(result.message || 'Lỗi khi xóa dòng');
+      }
+    } catch (error) {
+      console.error('Lỗi khi xóa:', error);
+      toast.error('Lỗi hệ thống khi xóa dòng');
+    }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-4 px-2 md:px-8">
       <div className="mx-auto">
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b mb-1">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b pb-1 mb-1">
           <h1 className="text-4xl font-extrabold text-gray-800 mb-2 md:mb-0">
             Task Tracker
           </h1>
           <div className="text-gray-700 text-lg flex items-center gap-2">
             <span>
-              Xin chào,{' '}
-              <span className="font-semibold text-blue-700">admin</span>
+              <span className="text-sm">Xin chào: </span>
+              <span className="font-semibold text-blue-700"> admin</span>
             </span>
             <span className="mx-2">|</span>
             <a href="#" className="text-blue-600 hover:underline font-medium">
               Logout
             </a>
           </div>
-          
-          <div className="fixed bottom-4 left-0 w-full flex flex-col md:flex-row md:items-center gap-2 justify-between px-10 ">
-            {/* Upload & Export */}
-            <div className="flex flex-col md:flex-row md:items-center gap-4 mt-6">
-              <form className="flex items-center gap-2 bg-white p-1 rounded-lg shadow">
-                <label className="font-medium text-green-700">
-                  <FontAwesomeIcon icon={faFileExcel} size="2x" />
-                </label>
-                <input
-                  onChange={handleFileChange}
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".xlsx, .xls"
-                  className="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                />
-                <button
-                  onClick={handleFileUpload}
-                  type="button"
-                  className="ml-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition cursor-pointer"
-                >
-                  Upload
-                </button>
-              </form>
-              <button className="px-2 py-1 bg-green-600 text-white rounded-lg font-medium shadow hover:bg-green-700 transition w-fit cursor-pointer" onClick={handleExportToExcel}>
-                Export Data Table to Excel
-              </button>
-            </div>
-
-            {/* Download Template */}
-            <div className="mt-10">
-              <a
-                onClick={handleDownloadTemplate}
-                className="text-blue-600 hover:underline font-medium text-base cursor-pointer"
-              >
-                Download Template{' '} 
-              </a>
-              
-              <a
-                href="#"
-                className="text-blue-600 hover:underline font-medium text-base"
-              >
-                Generate Report{' '}
-              </a>
-            </div>
-          </div>
         </div>
 
-        {/* Add New Column */}
-        {showInput ? (
-          <div className="flex items-center justify-end gap-2">
-            <input
-              value={newColumnName}
-              onChange={(e) => setNewColumnName(e.target.value)}
-              placeholder="Tên cột"
-              className="px-2 py-1 border rounded h-6 w-80 text-sm"
-            />
-            <button
-              onClick={handleAddColumn}
-              className="bg-blue-600 text-white px-3 rounded hover:bg-blue-700 cursor-pointer"
-            >
-              OK
-            </button>
-            <button
-              onClick={() => {
-                setShowInput(false);
-                setNewColumnName('');
+        {/* Search & Add New Column Section */}
+        <div className="flex items-center justify-between border-b pb-1 mb-3">
+          {/* Search box góc trái */}
+          <div className="flex items-center gap-2">
+            <label className="font-medium text-gray-700 text-base h-8 flex items-center">
+              Tìm theo
+            </label>
+            <select
+              className="border rounded px-2 py-1 h-8"
+              value={searchColumn}
+              onChange={(e) => {
+                setSearchColumn(e.target.value);
+                setSearchValue('');
               }}
-              className="bg-gray-400 text-white px-3 rounded hover:bg-gray-500 cursor-pointer"
             >
-              Cancel
-            </button>
+              <option value="">Cột</option>
+              {columns
+                .filter((col) => col.id !== 'actions' && col.id !== 'id')
+                .map((col) => (
+                  <option key={col.id} value={col.id}>
+                    {col.label}
+                  </option>
+                ))}
+            </select>
+            {searchColumn && (
+              <>
+                <input
+                  className="border rounded px-2 py-1 h-8 text-sm"
+                  placeholder={`Nhập giá trị...`}
+                  value={searchValue}
+                  onChange={(e) => setSearchValue(e.target.value)}
+                />
+                <button
+                  className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 cursor-pointer h-8"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleSearch();
+                  }}
+                  disabled={!searchValue}
+                >
+                  OK
+                </button>
+                <button
+                  className="bg-gray-400 text-white px-3 py-1 rounded hover:bg-gray-500 cursor-pointer h-8"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleCancelSearch();
+                  }}
+                >
+                  Cancel
+                </button>
+              </>
+            )}
           </div>
-        ) : (
-          <div className="flex items-center justify-end gap-2">
-            <button
-              onClick={() => setShowInput(true)}
-              className="text-blue-600 hover:underline font-medium text-base cursor-pointer"
-            >
-              + Thêm cột mới vào bảng
+
+          {/* Add New Column */}
+          {showInput ? (
+            <div className="flex items-center gap-2">
+              <input
+                value={newColumnName}
+                onChange={(e) => setNewColumnName(e.target.value)}
+                placeholder="Tên cột"
+                className="px-2 py-1 border rounded h-8"
+              />
+              <button
+                onClick={handleAddColumn}
+                className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 cursor-pointer h-8"
+              >
+                OK
               </button>
-         
-          </div>
-        )}
+              <button
+                onClick={() => {
+                  setShowInput(false);
+                  setNewColumnName('');
+                }}
+                className="bg-gray-400 text-white px-3 py-1 rounded hover:bg-gray-500 cursor-pointer h-8"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowInput(true)}
+                className="text-blue-600 hover:underline font-medium text-base cursor-pointer px-2 py-1 h-8"
+              >
+                + Thêm cột mới vào bảng
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Table */}
-        <div className="overflow-x-auto max-h-[72vh] overflow-y-auto mt-1 rounded-lg shadow bg-white custom-scrollbar">
+        <div className="overflow-x-auto max-h-[68vh] overflow-y-auto mt-1 rounded-lg shadow bg-white custom-scrollbar">
           <table className="min-w-full text-sm text-left">
             <thead>
               <DndContext
@@ -499,7 +591,7 @@ export default function HomePage() {
               </DndContext>
             </thead>
             <tbody>
-              {rowsToDisplay.map((row, rowIndex) => (
+              {(filteredRows ?? rowsToDisplay).map((row, rowIndex) => (
                 <tr key={rowIndex}>
                   {orderedColumns.map((col) =>
                     col.id === 'actions' ? (
@@ -507,7 +599,10 @@ export default function HomePage() {
                         key={col.id}
                         className="px-0 py-2 flex items-center justify-center gap-3 w-[48px]"
                       >
-                        <button className="text-red-600 flex items-center justify-center cursor-pointer">
+                        <button 
+                          className="text-red-600 flex items-center justify-center cursor-pointer" 
+                          onClick={() => row._id && handleDeleteRow(row._id)}
+                        >
                           <FontAwesomeIcon icon={faTrash} size="sm" />
                         </button>
 
@@ -520,9 +615,15 @@ export default function HomePage() {
                         key={col.id}
                         className="border px-3 py-2 text-gray-500 "
                       >
-                        {col.id === 'id'
+                        {col.id === 'stt'
                           ? rowIndex + 1
-                          : (row[col.id as keyof typeof row] ?? 'null')}
+                          : (() => {
+                              const value = row[col.id as keyof typeof row];
+                              if (value instanceof Date) {
+                                return value.toLocaleDateString('vi-VN');
+                              }
+                              return value ?? 'null';
+                            })()}
                       </td>
                     )
                   )}
@@ -530,6 +631,53 @@ export default function HomePage() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Upload & Export */}
+        <div className="fixed bottom-4 left-0 w-full flex flex-col md:flex-row md:items-center gap-4 justify-between px-10 ">
+          <div className="flex flex-col md:flex-row md:items-center gap-4 mt-6">
+            <form className="flex items-center gap-2 bg-white p-1 rounded-lg shadow">
+              <label className="font-medium text-green-700">
+                <FontAwesomeIcon icon={faFileExcel} size="2x" />
+              </label>
+              <input
+                onChange={handleFileChange}
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx, .xls"
+                className="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+              />
+              <button
+                onClick={handleFileUpload}
+                type="button"
+                className="ml-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition cursor-pointer"
+              >
+                Upload
+              </button>
+            </form>
+            <button
+              className="px-2 py-1 bg-green-600 text-white rounded-lg font-medium shadow hover:bg-green-700 transition w-fit cursor-pointer"
+              onClick={handleExportToExcel}
+            >
+              Export Data Table to Excel
+            </button>
+          </div>
+
+          {/* Download Template */}
+          <div className="mt-10">
+            <a
+              onClick={handleDownloadTemplate}
+              className="text-blue-600 hover:underline font-medium text-base cursor-pointer"
+            >
+              Download Template{' '}
+            </a>
+            <a
+              href="#"
+              className="text-blue-600 hover:underline font-medium text-base"
+            >
+              Generate Report{' '}
+            </a>
+          </div>
         </div>
       </div>
     </div>
