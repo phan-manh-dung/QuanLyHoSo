@@ -5,7 +5,13 @@ import type { DragEndEvent } from '@dnd-kit/core';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTrash, faPen, faFileExcel , faRightFromBracket } from '@fortawesome/free-solid-svg-icons';
+import {
+  faTrash,
+  faPen,
+  faFileExcel,
+  faRightFromBracket,
+} from '@fortawesome/free-solid-svg-icons';
+import AuthGuard from '../../src/components/AuthGuard';
 
 import {
   SortableContext,
@@ -41,7 +47,15 @@ interface ApiResponseItem {
 }
 
 // Sortable header component
-function SortableHeader({ column, onDeleteColumn }: { column: ColumnType; onDeleteColumn: (id: string) => void }) {
+function SortableHeader({
+  column,
+  onDeleteColumn,
+  checkAdmin,
+}: {
+  column: ColumnType;
+  onDeleteColumn: (id: string) => void;
+  checkAdmin: boolean;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id: column.id });
 
@@ -60,7 +74,7 @@ function SortableHeader({ column, onDeleteColumn }: { column: ColumnType; onDele
         <div {...attributes} {...listeners} className="flex-1">
           <span>{column.label}</span>
         </div>
-        {column.id !== 'actions' && column.id !== 'stt' && (
+        {checkAdmin && column.id !== 'actions' && column.id !== 'stt' && (
           <button
             onClick={(e) => {
               e.preventDefault();
@@ -88,9 +102,17 @@ export default function HomePage() {
   const [searchColumn, setSearchColumn] = useState<string>('');
   const [searchValue, setSearchValue] = useState<string>('');
   const [filteredRows, setFilteredRows] = useState<DataRow[] | null>(null);
+  const [userData, setUserData] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const rowsToDisplay = [...dataRowDB, ...dataColumn];
-  
+
+  // biến check admin để xác định quyền của user
+  const idAd = process.env.NEXT_PUBLIC_ID_ADMIN;
+  const checkAdmin =
+    userData?.username === 'admin' && userData?.role === 'adminql' && idAd
+      ? true
+      : false;
+
   // Khi render header và dữ liệu, sắp xếp lại columns để actions lên đầu
   const orderedColumns = React.useMemo(() => {
     const actionsCol = columns.find((col) => col.id === 'actions');
@@ -125,6 +147,21 @@ export default function HomePage() {
   // lấy dữ liệu cột từ API khi component mount
   useEffect(() => {
     fetchDataRows();
+  }, []);
+
+  // Lấy thông tin user từ localStorage
+  useEffect(() => {
+    const userId = localStorage.getItem('userId');
+    const username = localStorage.getItem('username');
+    const role = localStorage.getItem('role');
+
+    if (userId && username) {
+      setUserData({
+        userId,
+        username,
+        role: role || 'user',
+      });
+    }
   }, []);
 
   // Chuyển đổi ngày từ định dạng Excel sang định dạng JS Date
@@ -409,7 +446,7 @@ export default function HomePage() {
     setSearchValue('');
   };
 
-    // Hàm fetch dữ liệu từ database (tách riêng để có thể gọi lại)
+  // Hàm fetch dữ liệu từ database (tách riêng để có thể gọi lại)
   const fetchDataRows = async () => {
     try {
       const res = await fetch('/api/upload');
@@ -434,8 +471,10 @@ export default function HomePage() {
 
   // Hàm xóa dòng
   const handleDeleteRow = async (rowId: string) => {
-    const confirmed = window.confirm('Bạn có chắc chắn muốn xóa dòng này không?');
-    
+    const confirmed = window.confirm(
+      'Bạn có chắc chắn muốn xóa dòng này không?'
+    );
+
     if (!confirmed) {
       return;
     }
@@ -449,10 +488,10 @@ export default function HomePage() {
 
       if (res.ok) {
         toast.success('Xóa dòng thành công!');
-        
+
         // Load lại dữ liệu từ database sau khi xóa thành công
         await fetchDataRows();
-        
+
         // Clear dataColumn vì dữ liệu mới upload sẽ được load lại
         setDataColumn([]);
       } else {
@@ -466,7 +505,9 @@ export default function HomePage() {
 
   // Hàm xóa cột
   const handleDeleteColumn = async (columnId: string) => {
-    const confirmed = window.confirm('Bạn có chắc chắn muốn xóa cột này không?');
+    const confirmed = window.confirm(
+      'Bạn có chắc chắn muốn xóa cột này không?'
+    );
     if (!confirmed) {
       return;
     }
@@ -480,7 +521,7 @@ export default function HomePage() {
 
       if (res.ok) {
         toast.success('Xóa cột thành công!');
-        
+
         // Load lại danh sách cột từ database sau khi xóa thành công
         const fetchColumns = async () => {
           try {
@@ -511,237 +552,273 @@ export default function HomePage() {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-4 px-2 md:px-8">
-      <div className="mx-auto">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b pb-1 mb-1">
-          <h1 className="text-4xl font-extrabold text-gray-800 mb-2 md:mb-0">
-            Task Tracker
-          </h1>
-          <div className="text-gray-700 text-lg flex items-center gap-2">
-            <span>
-              <span className="text-sm">Xin chào: </span>
-              <span className="font-semibold text-blue-700"> admin</span>
-            </span>
-            <span className="mx-1">|</span>
-            <a href="#" className="text-blue-600 hover:underline font-medium">
-              <FontAwesomeIcon icon={faRightFromBracket} size="lg" />
-            </a>
-          </div>
-        </div>
+  // Hàm logout
+  const handleLogout = () => {
+    localStorage.removeItem('userId');
+    localStorage.removeItem('username');
+    localStorage.removeItem('role');
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
 
-        {/* Search & Add New Column Section */}
-        <div className="flex items-center justify-between border-b pb-1 mb-3">
-          {/* Search box góc trái */}
-          <div className="flex items-center gap-2">
-            <label className="font-medium text-gray-700 text-base h-8 flex items-center">
-              Tìm theo
-            </label>
-            <select
-              className="border rounded px-2 py-1 h-8"
-              value={searchColumn}
-              onChange={(e) => {
-                setSearchColumn(e.target.value);
-                setSearchValue('');
-              }}
-            >
-              <option value="">Cột</option>
-              {columns
-                .filter((col) => col.id !== 'actions' && col.id !== 'id')
-                .map((col) => (
-                  <option key={col.id} value={col.id}>
-                    {col.label}
-                  </option>
-                ))}
-            </select>
-            {searchColumn && (
-              <>
+    toast.success('Đã đăng xuất');
+    window.location.href = '/';
+  };
+
+  return (
+    <AuthGuard>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-4 px-2 md:px-8">
+        <div className="mx-auto">
+          {/* Header */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b pb-1 mb-1">
+            <h1 className="text-4xl font-extrabold text-gray-800 mb-2 md:mb-0">
+              Task Tracker
+            </h1>
+            <div className="text-gray-700 text-lg flex items-center gap-2">
+              <span>
+                <span className="text-sm">Xin chào: </span>
+                <span className="font-semibold text-blue-700">
+                  {' '}
+                  {userData?.username}
+                </span>
+              </span>
+              <span className="mx-1">|</span>
+              <a
+                href="#"
+                className="text-blue-600 hover:underline font-medium"
+                onClick={handleLogout}
+              >
+                <FontAwesomeIcon icon={faRightFromBracket} size="lg" />
+              </a>
+            </div>
+          </div>
+
+          {/* Search & Add New Column Section */}
+          <div className="flex items-center justify-between border-b pb-1 mb-3">
+            {/* Search box góc trái */}
+            <div className="flex items-center gap-2">
+              <label className="font-medium text-gray-700 text-base h-8 flex items-center">
+                Tìm theo
+              </label>
+              <select
+                className="border rounded px-2 py-1 h-8"
+                value={searchColumn}
+                onChange={(e) => {
+                  setSearchColumn(e.target.value);
+                  setSearchValue('');
+                }}
+              >
+                <option value="">Cột</option>
+                {columns
+                  .filter((col) => col.id !== 'actions' && col.id !== 'id')
+                  .map((col) => (
+                    <option key={col.id} value={col.id}>
+                      {col.label}
+                    </option>
+                  ))}
+              </select>
+              {searchColumn && (
+                <>
+                  <input
+                    className="border rounded px-2 py-1 h-8 text-sm"
+                    placeholder={`Nhập giá trị...`}
+                    value={searchValue}
+                    onChange={(e) => setSearchValue(e.target.value)}
+                  />
+                  <button
+                    className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 cursor-pointer h-8"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleSearch();
+                    }}
+                    disabled={!searchValue}
+                  >
+                    Tìm
+                  </button>
+                  <button
+                    className="bg-gray-400 text-white px-3 py-1 rounded hover:bg-gray-500 cursor-pointer h-8"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleCancelSearch();
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Add New Column */}
+            {showInput ? (
+              <div className="flex items-center gap-2">
                 <input
-                  className="border rounded px-2 py-1 h-8 text-sm"
-                  placeholder={`Nhập giá trị...`}
-                  value={searchValue}
-                  onChange={(e) => setSearchValue(e.target.value)}
+                  value={newColumnName}
+                  onChange={(e) => setNewColumnName(e.target.value)}
+                  placeholder="Tên cột"
+                  className="px-2 py-1 border rounded h-8"
                 />
                 <button
+                  onClick={handleAddColumn}
                   className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 cursor-pointer h-8"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleSearch();
-                  }}
-                  disabled={!searchValue}
                 >
-                  Tìm
+                  OK
                 </button>
                 <button
-                  className="bg-gray-400 text-white px-3 py-1 rounded hover:bg-gray-500 cursor-pointer h-8"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleCancelSearch();
+                  onClick={() => {
+                    setShowInput(false);
+                    setNewColumnName('');
                   }}
+                  className="bg-gray-400 text-white px-3 py-1 rounded hover:bg-gray-500 cursor-pointer h-8"
                 >
                   Cancel
                 </button>
-              </>
+              </div>
+            ) : (
+              checkAdmin && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowInput(true)}
+                    className="text-blue-600 hover:underline font-medium text-base cursor-pointer px-2 py-1 h-8"
+                  >
+                    + Thêm cột mới vào bảng
+                  </button>
+                </div>
+              )
             )}
           </div>
 
-          {/* Add New Column */}
-          {showInput ? (
-            <div className="flex items-center gap-2">
-              <input
-                value={newColumnName}
-                onChange={(e) => setNewColumnName(e.target.value)}
-                placeholder="Tên cột"
-                className="px-2 py-1 border rounded h-8"
-              />
-              <button
-                onClick={handleAddColumn}
-                className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 cursor-pointer h-8"
-              >
-                OK
-              </button>
-              <button
-                onClick={() => {
-                  setShowInput(false);
-                  setNewColumnName('');
-                }}
-                className="bg-gray-400 text-white px-3 py-1 rounded hover:bg-gray-500 cursor-pointer h-8"
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowInput(true)}
-                className="text-blue-600 hover:underline font-medium text-base cursor-pointer px-2 py-1 h-8"
-              >
-                + Thêm cột mới vào bảng
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Table */}
-        <div className="overflow-x-auto max-h-[68vh] overflow-y-auto mt-1 rounded-lg shadow bg-white custom-scrollbar">
-          <table className="min-w-full text-sm text-left">
-            <thead>
-              <DndContext
-                collisionDetection={closestCenter}
-                onDragEnd={handleDragEnd}
-              >
-                <SortableContext
-                  items={orderedColumns.map((col) => col.id)}
-                  strategy={verticalListSortingStrategy}
+          {/* Table */}
+          <div className="overflow-x-auto max-h-[68vh] overflow-y-auto mt-1 rounded-lg shadow bg-white custom-scrollbar">
+            <table className="min-w-full text-sm text-left">
+              <thead>
+                <DndContext
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
                 >
-                  <tr>
-                    {(orderedColumns ?? [])?.map((column) =>
-                      column.id === 'actions' ? (
-                        <th
-                          key={column.id}
-                          className="px-0 py-2 font-bold border bg-blue-100 sticky top-0 z-10 w-[48px] text-center"
+                  <SortableContext
+                    items={orderedColumns.map((col) => col.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <tr>
+                      {(orderedColumns ?? [])?.map((column) =>
+                        column.id === 'actions' ? (
+                          <th
+                            key={column.id}
+                            className="px-0 py-2 font-bold border bg-blue-100 sticky top-0 z-10 w-[48px] text-center"
+                          >
+                            {column.label}
+                          </th>
+                        ) : (
+                          <SortableHeader
+                            key={column.id}
+                            column={column}
+                            checkAdmin={checkAdmin}
+                            onDeleteColumn={handleDeleteColumn}
+                          />
+                        )
+                      )}
+                    </tr>
+                  </SortableContext>
+                </DndContext>
+              </thead>
+              <tbody>
+                {(filteredRows ?? rowsToDisplay).map((row, rowIndex) => (
+                  <tr key={rowIndex}>
+                    {orderedColumns.map((col) =>
+                      col.id === 'actions' ? (
+                        <td
+                          key={col.id}
+                          className="px-0 py-2 flex items-center justify-center gap-3 w-[48px]"
                         >
-                          {column.label}
-                        </th>
+                          {checkAdmin && (
+                            <div>
+                              <button
+                                className="text-red-600 flex items-center justify-center cursor-pointer"
+                                onClick={() =>
+                                  row._id && handleDeleteRow(row._id)
+                                }
+                              >
+                                <FontAwesomeIcon icon={faTrash} size="sm" />
+                              </button>
+
+                              <button className="text-blue-600 flex items-center justify-center cursor-pointer">
+                                <FontAwesomeIcon icon={faPen} size="sm" />
+                              </button>
+                            </div>
+                          )}
+                        </td>
                       ) : (
-                        <SortableHeader key={column.id} column={column} onDeleteColumn={handleDeleteColumn} />
+                        <td
+                          key={col.id}
+                          className="border px-3 py-2 text-gray-500 "
+                        >
+                          {col.id === 'stt'
+                            ? rowIndex + 1
+                            : (() => {
+                                const value = row[col.id as keyof typeof row];
+                                if (value instanceof Date) {
+                                  return value.toLocaleDateString('vi-VN');
+                                }
+                                return value ?? 'null';
+                              })()}
+                        </td>
                       )
                     )}
                   </tr>
-                </SortableContext>
-              </DndContext>
-            </thead>
-            <tbody>
-              {(filteredRows ?? rowsToDisplay).map((row, rowIndex) => (
-                <tr key={rowIndex}>
-                  {orderedColumns.map((col) =>
-                    col.id === 'actions' ? (
-                      <td
-                        key={col.id}
-                        className="px-0 py-2 flex items-center justify-center gap-3 w-[48px]"
-                      >
-                        <button 
-                          className="text-red-600 flex items-center justify-center cursor-pointer" 
-                          onClick={() => row._id && handleDeleteRow(row._id)}
-                        >
-                          <FontAwesomeIcon icon={faTrash} size="sm" />
-                        </button>
-
-                        <button className="text-blue-600 flex items-center justify-center cursor-pointer">
-                          <FontAwesomeIcon icon={faPen} size="sm" />
-                        </button>
-                      </td>
-                    ) : (
-                      <td
-                        key={col.id}
-                        className="border px-3 py-2 text-gray-500 "
-                      >
-                        {col.id === 'stt'
-                          ? rowIndex + 1
-                          : (() => {
-                              const value = row[col.id as keyof typeof row];
-                              if (value instanceof Date) {
-                                return value.toLocaleDateString('vi-VN');
-                              }
-                              return value ?? 'null';
-                            })()}
-                      </td>
-                    )
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Upload & Export */}
-        <div className="fixed bottom-4 left-0 w-full flex flex-col md:flex-row md:items-center gap-4 justify-between px-10 ">
-          <div className="flex flex-col md:flex-row md:items-center gap-4 mt-6">
-            <form className="flex items-center gap-2 bg-white p-1 rounded-lg shadow">
-              <label className="font-medium text-green-700">
-                <FontAwesomeIcon icon={faFileExcel} size="2x" />
-              </label>
-              <input
-                onChange={handleFileChange}
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx, .xls"
-                className="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-              />
-              <button
-                onClick={handleFileUpload}
-                type="button"
-                className="ml-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition cursor-pointer"
-              >
-                Upload
-              </button>
-            </form>
-            <button
-              className="px-2 py-1 bg-green-600 text-white rounded-lg font-medium shadow hover:bg-green-700 transition w-fit cursor-pointer"
-              onClick={handleExportToExcel}
-            >
-              Export Data Table to Excel
-            </button>
+                ))}
+              </tbody>
+            </table>
           </div>
 
-          {/* Download Template */}
-          <div className="mt-10">
-            <a
-              onClick={handleDownloadTemplate}
-              className="text-blue-600 hover:underline font-medium text-base cursor-pointer"
-            >
-              Download Template{' '}
-            </a>
-            <a
-              href="#"
-              className="text-blue-600 hover:underline font-medium text-base"
-            >
-              Generate Report{' '}
-            </a>
-          </div>
+          {/* Upload & Export */}
+          {checkAdmin && (
+            <div className="fixed bottom-4 left-0 w-full flex flex-col md:flex-row md:items-center gap-4 justify-between px-10 ">
+              <div className="flex flex-col md:flex-row md:items-center gap-4 mt-6">
+                <form className="flex items-center gap-2 bg-white p-1 rounded-lg shadow">
+                  <label className="font-medium text-green-700">
+                    <FontAwesomeIcon icon={faFileExcel} size="2x" />
+                  </label>
+                  <input
+                    onChange={handleFileChange}
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".xlsx, .xls"
+                    className="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                  />
+                  <button
+                    onClick={handleFileUpload}
+                    type="button"
+                    className="ml-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition cursor-pointer"
+                  >
+                    Upload
+                  </button>
+                </form>
+                <button
+                  className="px-2 py-1 bg-green-600 text-white rounded-lg font-medium shadow hover:bg-green-700 transition w-fit cursor-pointer"
+                  onClick={handleExportToExcel}
+                >
+                  Export Data Table to Excel
+                </button>
+              </div>
+
+              {/* Download Template */}
+              <div className="mt-10">
+                <a
+                  onClick={handleDownloadTemplate}
+                  className="text-blue-600 hover:underline font-medium text-base cursor-pointer"
+                >
+                  Download Template{' '}
+                </a>
+                <a
+                  href="#"
+                  className="text-blue-600 hover:underline font-medium text-base"
+                >
+                  Generate Report{' '}
+                </a>
+              </div>
+            </div>
+          )}
         </div>
       </div>
-    </div>
+    </AuthGuard>
   );
 }
