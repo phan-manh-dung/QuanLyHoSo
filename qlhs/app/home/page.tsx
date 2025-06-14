@@ -4,6 +4,8 @@ import { DndContext, closestCenter } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faTrash, faPen, faFileExcel } from '@fortawesome/free-solid-svg-icons';
 
 import {
   SortableContext,
@@ -33,7 +35,7 @@ interface ExcelRow {
 
 // Type for API response item
 interface ApiResponseItem {
-  values: Record<string, string | number | null>;
+  values: Record<string, string | number | null | Date>; // Xác định các kiểu giá trị có thể
 }
 
 // Sortable header component
@@ -69,7 +71,12 @@ export default function HomePage() {
   const [dataRowDB, setDataRowDB] = useState<[]>([]);
   const rowsToDisplay = [...dataRowDB, ...dataColumn];
 
-
+  // Khi render header và dữ liệu, sắp xếp lại columns để actions lên đầu
+  const orderedColumns = React.useMemo(() => {
+    const actionsCol = columns.find((col) => col.id === 'actions');
+    const otherCols = columns.filter((col) => col.id !== 'actions');
+    return actionsCol ? [actionsCol, ...otherCols] : columns;
+  }, [columns]);
 
   // Lấy dữ liệu cột từ API khi component mount
   useEffect(() => {
@@ -82,7 +89,7 @@ export default function HomePage() {
           ...data,
           {
             id: 'actions',
-            label: 'Actions',
+            label: 'AT',
             type: 'actions',
           },
         ];
@@ -101,11 +108,8 @@ export default function HomePage() {
       try {
         const res = await fetch('/api/upload');
         const data = await res.json();
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const flattened = data.map((item: any) => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const flatRow: Record<string, any> = {};
+        const flattened = data.map((item: ApiResponseItem) => {
+          const flatRow: Record<string, string | number | null | Date> = {};
 
           for (const [key, value] of Object.entries(item.values || {})) {
             flatRow[key] = value;
@@ -299,34 +303,32 @@ export default function HomePage() {
           body: JSON.stringify(jsonWithMappedKeys),
         });
 
-        const result = (await res.json()) as ApiResponseItem[];
+        const result = await res.json();
+        console.log('result', result);
 
-        // Không dùng  nữa, flatten data như sau:
-        const flattened = result.map((item) => {
+        if (result.success === false) {
+          toast.error(result.message || 'Lỗi hệ thống!');
+          return;
+        }
+
+        // Nếu thành công, flatten data như cũ
+        const flattened = (result.inserted || []).map((item: ApiResponseItem) => {
           const flatRow: Record<string, string | number | null> = {};
-
           for (const [key, value] of Object.entries(item.values || {})) {
-            flatRow[key] = value;
+            flatRow[key] = value as string | number | null;
           }
-
           return flatRow;
         });
+        setDataColumn(flattened);
 
-        setDataColumn(flattened)
-
-        if (res.ok) {
-          toast.success('Tải dữ liệu thành công!');
-          if (fileInputRef.current) {
-            fileInputRef.current.value = ''; // reset file input
-          }
-          setFile(null);
-        } else {
-          console.error('Lỗi khi tải lên:', result);
-          toast.error('Tải dữ liệu thất bại');
+        toast.success('Tải dữ liệu thành công!');
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''; // reset file input
         }
+        setFile(null);
       } catch (error) {
         console.error('Lỗi hệ thống:', error);
-        toast.error('Lỗi hệ thống xảy ra');
+        toast.error('Lỗi hệ thống!');
       }
     };
 
@@ -353,7 +355,7 @@ export default function HomePage() {
           </div>
         </div>
 
-         {/* Add New Column */}
+        {/* Add New Column */}
         {showInput ? (
           <div className="flex items-center justify-end gap-2">
             <input
@@ -398,15 +400,15 @@ export default function HomePage() {
                 onDragEnd={handleDragEnd}
               >
                 <SortableContext
-                  items={columns.map((col) => col.id)}
+                  items={orderedColumns.map((col) => col.id)}
                   strategy={verticalListSortingStrategy}
                 >
                   <tr>
-                    {(columns ?? [])?.map((column) =>
+                    {(orderedColumns ?? [])?.map((column) =>
                       column.id === 'actions' ? (
                         <th
                           key={column.id}
-                          className="px-3 py-2 font-bold border bg-blue-100 sticky top-0 z-10"
+                          className="px-0 py-2 font-bold border bg-blue-100 sticky top-0 z-10 w-[48px] text-center"
                         >
                           {column.label}
                         </th>
@@ -419,36 +421,35 @@ export default function HomePage() {
               </DndContext>
             </thead>
             <tbody>
-              {rowsToDisplay.map(
-                (row, rowIndex) => (
-                  <tr key={rowIndex}>
-                    {columns.map((col) =>
-                      col.id === 'actions' ? (
-                        <td
-                          key={col.id}
-                          className="border px-3 py-2 flex gap-2"
-                        >
-                          <button className="text-red-600 hover:underline cursor-pointer">
-                            Delete
-                          </button>
-                          <button className="text-blue-600 hover:underline cursor-pointer">
-                            Detail
-                          </button>
-                        </td>
-                      ) : (
-                        <td
-                          key={col.id}
-                          className="border px-3 py-2 text-gray-500 "
-                        >
-                          {col.id === 'id'
-                            ? rowIndex + 1
-                            : (row[col.id as keyof typeof row] ?? 'null')}
-                        </td>
-                      )
-                    )}
-                  </tr>
-                )
-              )}
+              {rowsToDisplay.map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  {orderedColumns.map((col) =>
+                    col.id === 'actions' ? (
+                      <td
+                        key={col.id}
+                        className="px-0 py-2 flex items-center justify-center gap-3 w-[48px]"
+                      >
+                        <button className="text-red-600 flex items-center justify-center cursor-pointer">
+                          <FontAwesomeIcon icon={faTrash} size="sm" />
+                        </button>
+
+                        <button className="text-blue-600 flex items-center justify-center cursor-pointer">
+                          <FontAwesomeIcon icon={faPen} size="sm" />
+                        </button>
+                      </td>
+                    ) : (
+                      <td
+                        key={col.id}
+                        className="border px-3 py-2 text-gray-500 "
+                      >
+                        {col.id === 'id'
+                          ? rowIndex + 1
+                          : (row[col.id as keyof typeof row] ?? 'null')}
+                      </td>
+                    )
+                  )}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -456,8 +457,10 @@ export default function HomePage() {
         <div className="fixed bottom-4 left-0 w-full flex flex-col md:flex-row md:items-center gap-4 justify-between px-10 ">
           {/* Upload & Export */}
           <div className="flex flex-col md:flex-row md:items-center gap-4 mt-6">
-            <form className="flex items-center gap-2 bg-white p-4 rounded-lg shadow">
-              <label className="font-medium text-gray-700">Upload Excel:</label>
+            <form className="flex items-center gap-2 bg-white p-1 rounded-lg shadow">
+              <label className="font-medium text-green-700">
+                <FontAwesomeIcon icon={faFileExcel} size="2x" />
+              </label>
               <input
                 onChange={handleFileChange}
                 ref={fileInputRef}
@@ -480,7 +483,7 @@ export default function HomePage() {
 
           {/* Download Template */}
           <div className="mt-10">
-            <h2 className="text-2xl font-bold text-gray-800 mb-2 cursor-pointer">
+            <h2 className="text-2px font-bold text-gray-800 mb-2 cursor-pointer">
               Tải file mẫu để nhập liệu
             </h2>
             <a

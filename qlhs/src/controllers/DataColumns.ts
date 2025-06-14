@@ -12,12 +12,17 @@ interface ApiResponse<T> {
   body: T;
 }
 
+interface SuccessResponse {
+  [key: string]: any; 
+}
+
 interface ErrorResponse {
   message: string;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function uploadDataController(req: Request): Promise<{ status: number; body: any }> {
+type ResponseBody = SuccessResponse | ErrorResponse;
+
+export async function uploadDataController(req: Request): Promise<{ status: number; body: ResponseBody }> {
   try {
     const data = await req.json();
 
@@ -28,7 +33,6 @@ export async function uploadDataController(req: Request): Promise<{ status: numb
     const inserted = await dataService.insertRows(data);
 
       return { status: 200, body: inserted };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
     return { status: 500, body: { message: error.message || 'Lỗi server' } };
   }
