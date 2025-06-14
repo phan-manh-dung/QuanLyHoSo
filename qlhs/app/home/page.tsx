@@ -12,6 +12,7 @@ import {
   faRightFromBracket,
 } from '@fortawesome/free-solid-svg-icons';
 import AuthGuard from '../../src/components/AuthGuard';
+import { Drawer, Form, Input, Button, Space } from 'antd';
 
 import {
   SortableContext,
@@ -103,6 +104,9 @@ export default function HomePage() {
   const [searchValue, setSearchValue] = useState<string>('');
   const [filteredRows, setFilteredRows] = useState<DataRow[] | null>(null);
   const [userData, setUserData] = useState<any>(null);
+  const [drawerVisible, setDrawerVisible] = useState(false);
+  const [selectedRow, setSelectedRow] = useState<DataRow | null>(null);
+  const [form] = Form.useForm();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const rowsToDisplay = [...dataRowDB, ...dataColumn];
 
@@ -564,6 +568,59 @@ export default function HomePage() {
     window.location.href = '/';
   };
 
+  // Hàm mở drawer để xem/sửa thông tin hàng
+  const handleEditRow = (row: DataRow) => {
+    setSelectedRow(row);
+    setDrawerVisible(true);
+    // Set form values
+    const formValues: Record<string, any> = {};
+    columns.forEach(col => {
+      if (col.id !== 'actions' && col.id !== 'stt') {
+        formValues[col.id] = row[col.id] || '';
+      }
+    });
+    form.setFieldsValue(formValues);
+  };
+
+  // Hàm đóng drawer
+  const handleCloseDrawer = () => {
+    setDrawerVisible(false);
+    setSelectedRow(null);
+    form.resetFields();
+  };
+
+  // Hàm lưu thay đổi
+  const handleSaveChanges = async (values: any) => {
+    if (!selectedRow?._id) {
+      toast.error('Không tìm thấy ID của dòng dữ liệu');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/upload/${selectedRow._id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ values }),
+      });
+
+      const result = await res.json();
+
+      if (res.ok) {
+        toast.success('Cập nhật thành công!');
+        handleCloseDrawer();
+        // Reload data
+        await fetchDataRows();
+      } else {
+        toast.error(result.message || 'Lỗi khi cập nhật');
+      }
+    } catch (error) {
+      console.error('Lỗi khi cập nhật:', error);
+      toast.error('Lỗi hệ thống khi cập nhật');
+    }
+  };
+
   return (
     <AuthGuard>
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-4 px-2 md:px-8">
@@ -738,7 +795,10 @@ export default function HomePage() {
                                   >
                                     <FontAwesomeIcon icon={faTrash} size="sm" />
                                   </button>
-                                  <button className="text-blue-600 flex items-center justify-center cursor-pointer">
+                                  <button 
+                                    className="text-blue-600 flex items-center justify-center cursor-pointer"
+                                    onClick={() => handleEditRow(row)}
+                                  >
                                     <FontAwesomeIcon icon={faPen} size="sm" />
                                   </button>
                                 </div>
@@ -820,6 +880,43 @@ export default function HomePage() {
           )}
         </div>
       </div>
+
+      {/* Drawer for editing row details */}
+      <Drawer
+        title="Chi tiết dữ liệu"
+        placement="right"
+        width={600}
+        onClose={handleCloseDrawer}
+        open={drawerVisible}
+        footer={
+          <div style={{ textAlign: 'right' }}>
+            <Space>
+              <Button onClick={handleCloseDrawer}>Hủy</Button>
+              <Button type="primary" onClick={() => form.submit()}>
+                Lưu thay đổi
+              </Button>
+            </Space>
+          </div>
+        }
+      >
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={handleSaveChanges}
+        >
+          {columns
+            .filter(col => col.id !== 'actions' && col.id !== 'stt')
+            .map(col => (
+            <Form.Item
+          key={col.id}
+          label={<span style={{ fontWeight: 'bold' }}>{col.label}</span>}
+          name={col.id}
+        >
+          <Input placeholder={`Nhập ${col.label}`} style={{ width: '100%' }} />
+        </Form.Item>
+            ))}
+        </Form>
+      </Drawer>
     </AuthGuard>
   );
 }

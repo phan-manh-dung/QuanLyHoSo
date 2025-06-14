@@ -65,3 +65,20 @@ export async function deleteRow(id: string) {
   
   return deletedRow;
 }
+
+// update a specific row by ID
+export async function updateRow(id: string, values: Record<string, any>) {
+  await connectToDatabase();
+  
+  const updatedRow = await DataColumn.findByIdAndUpdate(
+    id,
+    { values: new Map(Object.entries(values)) },
+    { new: true }
+  );
+  
+  if (!updatedRow) {
+    throw new Error('Row not found');
+  }
+  
+  return updatedRow;
+}

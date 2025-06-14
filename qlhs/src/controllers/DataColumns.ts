@@ -1,6 +1,6 @@
 import * as dataService from '../services/DataColumns';
 import { Schema } from 'mongoose';
-import { deleteRow } from '../services/DataColumns';
+import { deleteRow, updateRow } from '../services/DataColumns';
 
 interface ColumnData {
   id: string;
@@ -64,6 +64,38 @@ export async function deleteRowController(
       body: {
         message: 'Row deleted successfully',
         deletedRow,
+      },
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Internal Server Error';
+    return {
+      status: 500,
+      body: { message: errorMessage },
+    };
+  }
+}
+
+// update row
+export async function updateRowController(
+  id: string,
+  req: Request
+): Promise<ApiResponse<SuccessResponse | ErrorResponse>> {
+  try {
+    const { values } = await req.json();
+    
+    if (!values || typeof values !== 'object') {
+      return {
+        status: 400,
+        body: { message: 'Values object is required' },
+      };
+    }
+
+    const updatedRow = await updateRow(id, values);
+    return {
+      status: 200,
+      body: {
+        message: 'Row updated successfully',
+        updatedRow,
       },
     };
   } catch (error) {
