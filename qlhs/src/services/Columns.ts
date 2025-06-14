@@ -19,3 +19,14 @@ export async function getAllColumns() {
   const columns = await Column.find();
   return columns;
 }
+
+// delete a specific column by ID
+export async function deleteColumn(id: string) {
+  const deletedColumn = await Column.findOneAndDelete({ id });
+  
+  if (!deletedColumn) {
+    throw new Error('Column not found');
+  }
+  
+  return deletedColumn;
+}

@@ -18,6 +18,11 @@ interface ErrorResponse {
   message: string;
 }
 
+interface SuccessResponse {
+  message: string;
+  deletedColumn: ColumnData;
+}
+
 export async function createColumn(
   req: Request
 ): Promise<ApiResponse<ColumnData | ErrorResponse>> {
@@ -48,6 +53,28 @@ export async function getColumns(): Promise<ApiResponse<ColumnData[] | ErrorResp
   try {
     const columns = await columnService.getAllColumns();
     return { status: 200, body: columns };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Internal Server Error';
+    return {
+      status: 500,
+      body: { message: errorMessage },
+    };
+  }
+}
+
+// delete a specific column by ID
+export async function deleteColumnController(
+  id: string
+): Promise<ApiResponse<SuccessResponse | ErrorResponse>> {
+  try {
+    const deletedColumn = await columnService.deleteColumn(id);
+    return {
+      status: 200,
+      body: {
+        message: 'Column deleted successfully',
+        deletedColumn,
+      },
+    };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Internal Server Error';
     return {

@@ -5,7 +5,7 @@ import type { DragEndEvent } from '@dnd-kit/core';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTrash, faPen, faFileExcel } from '@fortawesome/free-solid-svg-icons';
+import { faTrash, faPen, faFileExcel , faRightFromBracket } from '@fortawesome/free-solid-svg-icons';
 
 import {
   SortableContext,
@@ -41,7 +41,7 @@ interface ApiResponseItem {
 }
 
 // Sortable header component
-function SortableHeader({ column }: { column: ColumnType }) {
+function SortableHeader({ column, onDeleteColumn }: { column: ColumnType; onDeleteColumn: (id: string) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id: column.id });
 
@@ -54,11 +54,26 @@ function SortableHeader({ column }: { column: ColumnType }) {
     <th
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
-      className="px-3 py-2 font-bold border bg-blue-100 sticky top-0 z-10 cursor-move"
+      className="px-3 py-2 font-bold border bg-blue-100 sticky top-0 z-10 cursor-move relative group"
     >
-      {column.label}
+      <div className="flex items-center justify-between">
+        <div {...attributes} {...listeners} className="flex-1">
+          <span>{column.label}</span>
+        </div>
+        {column.id !== 'actions' && column.id !== 'stt' && (
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onDeleteColumn(column.id);
+            }}
+            className="ml-2 text-red-600 hover:text-red-800 p-1 rounded z-20 relative"
+            title="Xóa cột"
+          >
+            <FontAwesomeIcon icon={faTrash} size="xs" />
+          </button>
+        )}
+      </div>
     </th>
   );
 }
@@ -193,7 +208,7 @@ export default function HomePage() {
   const handleDownloadTemplate = () => {
     // Lọc bỏ cột actions
     const visibleColumns = columns.filter(
-      (col) => col.id !== 'actions' && col.id !== 'id'
+      (col) => col.id !== 'actions' && col.id !== 'stt'
     );
 
     // Tạo mảng object với key là col.label và value là rỗng
@@ -449,6 +464,53 @@ export default function HomePage() {
     }
   };
 
+  // Hàm xóa cột
+  const handleDeleteColumn = async (columnId: string) => {
+    const confirmed = window.confirm('Bạn có chắc chắn muốn xóa cột này không?');
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/column/${columnId}`, {
+        method: 'DELETE',
+      });
+
+      const result = await res.json();
+
+      if (res.ok) {
+        toast.success('Xóa cột thành công!');
+        
+        // Load lại danh sách cột từ database sau khi xóa thành công
+        const fetchColumns = async () => {
+          try {
+            const res = await fetch('/api/column');
+            const data = await res.json();
+            // Thêm cột actions vào cuối danh sách cột
+            const columnsWithActions = [
+              ...data,
+              {
+                id: 'actions',
+                label: 'AT',
+                type: 'actions',
+              },
+            ];
+            setColumns(columnsWithActions);
+          } catch (error) {
+            console.error('Failed to fetch columns:', error);
+          }
+        };
+
+        await fetchColumns();
+      } else {
+        toast.error(result.message || 'Lỗi khi xóa cột');
+      }
+    } catch (error) {
+      console.error('Lỗi khi xóa:', error);
+      toast.error('Lỗi hệ thống khi xóa cột');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-4 px-2 md:px-8">
       <div className="mx-auto">
@@ -462,9 +524,9 @@ export default function HomePage() {
               <span className="text-sm">Xin chào: </span>
               <span className="font-semibold text-blue-700"> admin</span>
             </span>
-            <span className="mx-2">|</span>
+            <span className="mx-1">|</span>
             <a href="#" className="text-blue-600 hover:underline font-medium">
-              Logout
+              <FontAwesomeIcon icon={faRightFromBracket} size="lg" />
             </a>
           </div>
         </div>
@@ -509,7 +571,7 @@ export default function HomePage() {
                   }}
                   disabled={!searchValue}
                 >
-                  OK
+                  Tìm
                 </button>
                 <button
                   className="bg-gray-400 text-white px-3 py-1 rounded hover:bg-gray-500 cursor-pointer h-8"
@@ -583,7 +645,7 @@ export default function HomePage() {
                           {column.label}
                         </th>
                       ) : (
-                        <SortableHeader key={column.id} column={column} />
+                        <SortableHeader key={column.id} column={column} onDeleteColumn={handleDeleteColumn} />
                       )
                     )}
                   </tr>
