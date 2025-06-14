@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteRowController, updateRowController } from '../../../../src/controllers/DataColumns';
 
-// Định nghĩa kiểu cho params
-type Params = {
-  id: string;
-};
-
-export async function DELETE(req: NextRequest, { params }: { params: Params }) {
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
     const { id } = params;
     
@@ -25,7 +23,10 @@ export async function DELETE(req: NextRequest, { params }: { params: Params }) {
   }
 }
 
-export async function PUT(req: NextRequest, { params }: { params: Params }) {
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
     const { id } = params;
     

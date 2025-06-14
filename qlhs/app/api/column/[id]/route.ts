@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteColumnController } from '../../../../src/controllers/Columns';
 
-// Định nghĩa kiểu cho params
-type Params = {
-  id: string;
-};
-
-export async function DELETE(req: NextRequest, { params }: { params: Params }) {
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
     const { id } = params;
     
