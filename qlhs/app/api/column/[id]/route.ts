@@ -1,10 +1,12 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { deleteColumnController } from '../../../../src/controllers/Columns';
 
-export async function DELETE(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
+// Định nghĩa kiểu cho params
+type Params = {
+  id: string;
+};
+
+export async function DELETE(req: NextRequest, { params }: { params: Params }) {
   try {
     const { id } = params;
     
@@ -21,4 +23,4 @@ export async function DELETE(
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     return NextResponse.json({ message: errorMessage }, { status: 500 });
   }
-} 
+}
