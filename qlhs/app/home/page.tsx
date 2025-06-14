@@ -146,7 +146,7 @@ export default function HomePage() {
     const trimmed = newColumnName.trim();
 
     if (!trimmed) {
-      toast('Tên cột không được để trống và không chứa ký tự đặc biệt!');
+      toast('Tên cột không được để trống!');
       return;
     }
 
@@ -312,13 +312,15 @@ export default function HomePage() {
         }
 
         // Nếu thành công, flatten data như cũ
-        const flattened = (result.inserted || []).map((item: ApiResponseItem) => {
-          const flatRow: Record<string, string | number | null> = {};
-          for (const [key, value] of Object.entries(item.values || {})) {
-            flatRow[key] = value as string | number | null;
+        const flattened = (result.inserted || []).map(
+          (item: ApiResponseItem) => {
+            const flatRow: Record<string, string | number | null> = {};
+            for (const [key, value] of Object.entries(item.values || {})) {
+              flatRow[key] = value as string | number | null;
+            }
+            return flatRow;
           }
-          return flatRow;
-        });
+        );
         setDataColumn(flattened);
 
         toast.success('Tải dữ liệu thành công!');
@@ -335,11 +337,41 @@ export default function HomePage() {
     reader.readAsBinaryString(file);
   };
 
+  // Hàm export dữ liệu bảng ra Excel (loại trừ cột AT)
+  const handleExportToExcel = () => {
+    // Hỏi tên file
+    const fileName = window.prompt('Nhập tên file muốn tải xuống (không cần .xlsx):', 'data-table');
+    if (fileName === null) return; // Người dùng bấm Cancel
+
+    const exportColumns = columns.filter(col => col.id !== 'actions' && col.label !== 'AT');
+    const exportData = rowsToDisplay.map((row, idx) => {
+      const obj: Record<string, string | number | null> = {};
+      obj['id'] = idx + 1; // Thêm cột id tự tăng
+      exportColumns.forEach(col => {
+        obj[col.label] = row[col.id] ?? '';
+      });
+      return obj;
+    });
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Data');
+    const excelBuffer = XLSX.write(workbook, {
+      bookType: 'xlsx',
+      type: 'array',
+    });
+    const fileBlob = new Blob([excelBuffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8',
+    });
+    // Nếu người dùng không nhập gì, dùng tên mặc định
+    const finalName = fileName && fileName.trim() !== '' ? fileName.trim() + '.xlsx' : 'data-table.xlsx';
+    saveAs(fileBlob, finalName);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-4 px-2 md:px-8">
       <div className="mx-auto">
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b pb-4 mb-3">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b mb-1">
           <h1 className="text-4xl font-extrabold text-gray-800 mb-2 md:mb-0">
             Task Tracker
           </h1>
@@ -353,6 +385,51 @@ export default function HomePage() {
               Logout
             </a>
           </div>
+          
+          <div className="fixed bottom-4 left-0 w-full flex flex-col md:flex-row md:items-center gap-2 justify-between px-10 ">
+            {/* Upload & Export */}
+            <div className="flex flex-col md:flex-row md:items-center gap-4 mt-6">
+              <form className="flex items-center gap-2 bg-white p-1 rounded-lg shadow">
+                <label className="font-medium text-green-700">
+                  <FontAwesomeIcon icon={faFileExcel} size="2x" />
+                </label>
+                <input
+                  onChange={handleFileChange}
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx, .xls"
+                  className="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                />
+                <button
+                  onClick={handleFileUpload}
+                  type="button"
+                  className="ml-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition cursor-pointer"
+                >
+                  Upload
+                </button>
+              </form>
+              <button className="px-2 py-1 bg-green-600 text-white rounded-lg font-medium shadow hover:bg-green-700 transition w-fit cursor-pointer" onClick={handleExportToExcel}>
+                Export Data Table to Excel
+              </button>
+            </div>
+
+            {/* Download Template */}
+            <div className="mt-10">
+              <a
+                onClick={handleDownloadTemplate}
+                className="text-blue-600 hover:underline font-medium text-base cursor-pointer"
+              >
+                Download Template{' '} 
+              </a>
+              
+              <a
+                href="#"
+                className="text-blue-600 hover:underline font-medium text-base"
+              >
+                Generate Report{' '}
+              </a>
+            </div>
+          </div>
         </div>
 
         {/* Add New Column */}
@@ -362,7 +439,7 @@ export default function HomePage() {
               value={newColumnName}
               onChange={(e) => setNewColumnName(e.target.value)}
               placeholder="Tên cột"
-              className="px-2 py-1 border rounded"
+              className="px-2 py-1 border rounded h-6 w-80 text-sm"
             />
             <button
               onClick={handleAddColumn}
@@ -387,12 +464,13 @@ export default function HomePage() {
               className="text-blue-600 hover:underline font-medium text-base cursor-pointer"
             >
               + Thêm cột mới vào bảng
-            </button>
+              </button>
+         
           </div>
         )}
 
         {/* Table */}
-        <div className="overflow-x-auto max-h-[64vh] overflow-y-auto mt-1 rounded-lg shadow bg-white custom-scrollbar">
+        <div className="overflow-x-auto max-h-[72vh] overflow-y-auto mt-1 rounded-lg shadow bg-white custom-scrollbar">
           <table className="min-w-full text-sm text-left">
             <thead>
               <DndContext
@@ -452,53 +530,6 @@ export default function HomePage() {
               ))}
             </tbody>
           </table>
-        </div>
-
-        <div className="fixed bottom-4 left-0 w-full flex flex-col md:flex-row md:items-center gap-4 justify-between px-10 ">
-          {/* Upload & Export */}
-          <div className="flex flex-col md:flex-row md:items-center gap-4 mt-6">
-            <form className="flex items-center gap-2 bg-white p-1 rounded-lg shadow">
-              <label className="font-medium text-green-700">
-                <FontAwesomeIcon icon={faFileExcel} size="2x" />
-              </label>
-              <input
-                onChange={handleFileChange}
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx, .xls"
-                className="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-              />
-              <button
-                onClick={handleFileUpload}
-                type="button"
-                className="ml-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition cursor-pointer"
-              >
-                Upload
-              </button>
-            </form>
-            <button className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium shadow hover:bg-green-700 transition w-fit cursor-pointer">
-              Export Data Table to Excel
-            </button>
-          </div>
-
-          {/* Download Template */}
-          <div className="mt-10">
-            <h2 className="text-2px font-bold text-gray-800 mb-2 cursor-pointer">
-              Tải file mẫu để nhập liệu
-            </h2>
-            <a
-              onClick={handleDownloadTemplate}
-              className="text-blue-600 hover:underline font-medium text-base cursor-pointer"
-            >
-              Download Template{' '}
-            </a>
-            <a
-              href="#"
-              className="text-blue-600 hover:underline font-medium text-base"
-            >
-              Generate Report{' '}
-            </a>
-          </div>
         </div>
       </div>
     </div>

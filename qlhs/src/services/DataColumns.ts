@@ -5,7 +5,6 @@ import { connectToDatabase } from '../configs/db';
 export async function insertRows(data: any[]) {
   await connectToDatabase();
 
-  // Lấy tất cả dữ liệu đã có trong DB
   const allRows = await DataColumn.find();
 
   // Chuẩn hóa dữ liệu DB thành mảng object thuần
