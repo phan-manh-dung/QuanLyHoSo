@@ -687,17 +687,18 @@ export default function HomePage() {
           </div>
 
           {/* Table */}
+
           <div className="overflow-x-auto max-h-[68vh] overflow-y-auto mt-1 rounded-lg shadow bg-white custom-scrollbar">
-            <table className="min-w-full text-sm text-left">
-              <thead>
-                <DndContext
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleDragEnd}
-                >
-                  <SortableContext
-                    items={orderedColumns.map((col) => col.id)}
-                    strategy={verticalListSortingStrategy}
-                  >
+            <DndContext
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={orderedColumns.map((col) => col.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <table className="min-w-full text-sm text-left">
+                  <thead>
                     <tr>
                       {(orderedColumns ?? [])?.map((column) =>
                         column.id === 'actions' ? (
@@ -717,56 +718,56 @@ export default function HomePage() {
                         )
                       )}
                     </tr>
-                  </SortableContext>
-                </DndContext>
-              </thead>
-              <tbody>
-                {(filteredRows ?? rowsToDisplay).map((row, rowIndex) => (
-                  <tr key={rowIndex}>
-                    {orderedColumns.map((col) =>
-                      col.id === 'actions' ? (
-                        <td
-                          key={col.id}
-                          className="px-0 py-2 flex items-center justify-center gap-3 w-[48px]"
-                        >
-                          {checkAdmin && (
-                            <div>
-                              <button
-                                className="text-red-600 flex items-center justify-center cursor-pointer"
-                                onClick={() =>
-                                  row._id && handleDeleteRow(row._id)
-                                }
-                              >
-                                <FontAwesomeIcon icon={faTrash} size="sm" />
-                              </button>
-
-                              <button className="text-blue-600 flex items-center justify-center cursor-pointer">
-                                <FontAwesomeIcon icon={faPen} size="sm" />
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      ) : (
-                        <td
-                          key={col.id}
-                          className="border px-3 py-2 text-gray-500 "
-                        >
-                          {col.id === 'stt'
-                            ? rowIndex + 1
-                            : (() => {
-                                const value = row[col.id as keyof typeof row];
-                                if (value instanceof Date) {
-                                  return value.toLocaleDateString('vi-VN');
-                                }
-                                return value ?? 'null';
-                              })()}
-                        </td>
-                      )
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody>
+                    {(filteredRows ?? rowsToDisplay).map((row, rowIndex) => (
+                      <tr key={rowIndex}>
+                        {orderedColumns.map((col) =>
+                          col.id === 'actions' ? (
+                            <td
+                              key={col.id}
+                              className="px-0 py-2 flex items-center justify-center gap-1 flex-nowrap "
+                            >
+                              {checkAdmin && (
+                                <div className="flex gap-1">
+                                  <button
+                                    className="text-red-600 flex items-center justify-center cursor-pointer"
+                                    onClick={() =>
+                                      row._id && handleDeleteRow(row._id)
+                                    }
+                                  >
+                                    <FontAwesomeIcon icon={faTrash} size="sm" />
+                                  </button>
+                                  <button className="text-blue-600 flex items-center justify-center cursor-pointer">
+                                    <FontAwesomeIcon icon={faPen} size="sm" />
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          ) : (
+                            <td
+                              key={col.id}
+                              className="border px-3 py-2 text-gray-500 "
+                            >
+                              {col.id === 'stt'
+                                ? rowIndex + 1
+                                : (() => {
+                                    const value =
+                                      row[col.id as keyof typeof row];
+                                    if (value instanceof Date) {
+                                      return value.toLocaleDateString('vi-VN');
+                                    }
+                                    return value ?? 'null';
+                                  })()}
+                            </td>
+                          )
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </SortableContext>
+            </DndContext>
           </div>
 
           {/* Upload & Export */}
