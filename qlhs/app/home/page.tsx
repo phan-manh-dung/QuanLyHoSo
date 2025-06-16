@@ -135,6 +135,41 @@ export default function HomePage() {
     }).length;
     const kttNotApprovedRecords = totalRecords - kttApprovedRecords;
 
+    // Thống kê theo người phụ trách hồ sơ
+    const staffStats = new Map();
+    
+    rowsToDisplay.forEach(row => {
+      const staffName = row['phu-trach-hs'] || 'Chưa phân công';
+      const isCompleted = row['ton-tai-va-huong-giai-quyet'] === 'Đã thanh toán xong' || 
+                         row['ton-tai-va-huong-giai-quyet'] === 'đã thanh toán xong';
+      
+      if (!staffStats.has(staffName)) {
+        staffStats.set(staffName, {
+          total: 0,
+          completed: 0,
+          notCompleted: 0
+        });
+      }
+      
+      const stats = staffStats.get(staffName);
+      stats.total += 1;
+      
+      if (isCompleted) {
+        stats.completed += 1;
+      } else {
+        stats.notCompleted += 1;
+      }
+    });
+
+    // Chuyển đổi Map thành Array và tính phần trăm
+    const staffStatistics = Array.from(staffStats.entries()).map(([staffName, stats]) => ({
+      staffName,
+      total: stats.total,
+      completed: stats.completed,
+      notCompleted: stats.notCompleted,
+      completionRate: stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0
+    }));
+
     return {
       totalRecords,
       paidRecords,
@@ -148,7 +183,8 @@ export default function HomePage() {
       kttApprovedRecords,
       kttNotApprovedRecords,
       kttApprovedPercentage: totalRecords > 0 ? Math.round((kttApprovedRecords / totalRecords) * 100) : 0,
-      kttNotApprovedPercentage: totalRecords > 0 ? Math.round((kttNotApprovedRecords / totalRecords) * 100) : 0
+      kttNotApprovedPercentage: totalRecords > 0 ? Math.round((kttNotApprovedRecords / totalRecords) * 100) : 0,
+      staffStatistics
     };
   };
 
@@ -972,7 +1008,7 @@ export default function HomePage() {
                           cx="50%"
                           cy="50%"
                           labelLine={false}
-                          label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                          label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
                           outerRadius={60}
                           fill="#8884d8"
                           dataKey="value"
@@ -998,7 +1034,7 @@ export default function HomePage() {
                           cx="50%"
                           cy="50%"
                           labelLine={false}
-                          label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                          label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
                           outerRadius={60}
                           fill="#8884d8"
                           dataKey="value"
@@ -1024,7 +1060,7 @@ export default function HomePage() {
                           cx="50%"
                           cy="50%"
                           labelLine={false}
-                          label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                          label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
                           outerRadius={60}
                           fill="#8884d8"
                           dataKey="value"
@@ -1040,6 +1076,86 @@ export default function HomePage() {
                   </div>
                 </Card>
               </Col>
+            </Row>
+          </Card>
+        </div>
+
+        {/* Thống kê theo người phụ trách */}
+        <div className="mt-6">
+          <Card title="Thống kê theo người phụ trách hồ sơ" className="shadow-lg">
+            <Row gutter={[16, 16]}>
+              {statistics.staffStatistics.map((staff, index) => (
+                <Col xs={24} sm={12} key={index}>
+                  <Card 
+                    title={staff.staffName} 
+                    className="text-center"
+                    style={{ 
+                      borderLeft: `4px solid ${staff.completionRate >= 80 ? '#52c41a' : staff.completionRate >= 50 ? '#faad14' : '#ff4d4f'}` 
+                    }}
+                  >
+                    <Row gutter={[8, 8]}>
+                      <Col span={8}>
+                        <Statistic
+                          title="Tổng hồ sơ"
+                          value={staff.total}
+                          valueStyle={{ color: '#1890ff', fontSize: '18px' }}
+                        />
+                      </Col>
+                      <Col span={8}>
+                        <Statistic
+                          title="Đã hoàn thành"
+                          value={staff.completed}
+                          valueStyle={{ color: '#52c41a', fontSize: '18px' }}
+                        />
+                      </Col>
+                      <Col span={8}>
+                        <Statistic
+                          title="Chưa hoàn thành"
+                          value={staff.notCompleted}
+                          valueStyle={{ color: '#ff4d4f', fontSize: '18px' }}
+                        />
+                      </Col>
+                    </Row>
+                    <div className="mt-3">
+                      <Statistic
+                        title="Tỷ lệ hoàn thành"
+                        value={staff.completionRate}
+                        suffix="%"
+                        valueStyle={{ 
+                          color: staff.completionRate >= 80 ? '#52c41a' : staff.completionRate >= 50 ? '#faad14' : '#ff4d4f',
+                          fontSize: '20px',
+                          fontWeight: 'bold'
+                        }}
+                      />
+                    </div>
+                    
+                    {/* Biểu đồ mini cho từng người */}
+                    <div style={{ width: '100%', height: '120px', marginTop: '10px' }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={[
+                              { name: 'Đã hoàn thành', value: staff.completed, color: '#52c41a' },
+                              { name: 'Chưa hoàn thành', value: staff.notCompleted, color: '#ff4d4f' }
+                            ]}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                            outerRadius={40}
+                            fill="#8884d8"
+                            dataKey="value"
+                          >
+                            <Cell fill="#52c41a" />
+                            <Cell fill="#ff4d4f" />
+                          </Pie>
+                          <Tooltip formatter={(value, name) => [value, name]} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </Card>
+                </Col>
+              ))}
             </Row>
           </Card>
         </div>
