@@ -12,7 +12,8 @@ import {
   faGear,
 } from '@fortawesome/free-solid-svg-icons';
 import AuthGuard from '../../src/components/AuthGuard';
-import { Drawer, Form, Input, Button, Space } from 'antd';
+import { Drawer, Form, Input, Button, Space, Card, Row, Col, Statistic } from 'antd';
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 
 import {
   SortableContext,
@@ -110,6 +111,66 @@ export default function HomePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const rowsToDisplay = [...dataRowDB, ...dataColumn];
   const [settingsDrawerVisible, setSettingsDrawerVisible] = useState(false);
+
+  // Tính toán thống kê
+  const calculateStatistics = () => {
+    const totalRecords = rowsToDisplay.length;
+    const paidRecords = rowsToDisplay.filter(row => {
+      const paymentStatus = row['thanh-toan-xong'];
+      return paymentStatus === 'X' || paymentStatus === 'x';
+    }).length;
+    const unpaidRecords = totalRecords - paidRecords;
+
+    // Thống kê KTV duyệt
+    const ktvApprovedRecords = rowsToDisplay.filter(row => {
+      const ktvStatus = row['ktv-duyet'];
+      return ktvStatus === 'X' || ktvStatus === 'x';
+    }).length;
+    const ktvNotApprovedRecords = totalRecords - ktvApprovedRecords;
+
+    // Thống kê KTT duyệt
+    const kttApprovedRecords = rowsToDisplay.filter(row => {
+      const kttStatus = row['ktt-duyet'];
+      return kttStatus === 'X' || kttStatus === 'x';
+    }).length;
+    const kttNotApprovedRecords = totalRecords - kttApprovedRecords;
+
+    return {
+      totalRecords,
+      paidRecords,
+      unpaidRecords,
+      paidPercentage: totalRecords > 0 ? Math.round((paidRecords / totalRecords) * 100) : 0,
+      unpaidPercentage: totalRecords > 0 ? Math.round((unpaidRecords / totalRecords) * 100) : 0,
+      ktvApprovedRecords,
+      ktvNotApprovedRecords,
+      ktvApprovedPercentage: totalRecords > 0 ? Math.round((ktvApprovedRecords / totalRecords) * 100) : 0,
+      ktvNotApprovedPercentage: totalRecords > 0 ? Math.round((ktvNotApprovedRecords / totalRecords) * 100) : 0,
+      kttApprovedRecords,
+      kttNotApprovedRecords,
+      kttApprovedPercentage: totalRecords > 0 ? Math.round((kttApprovedRecords / totalRecords) * 100) : 0,
+      kttNotApprovedPercentage: totalRecords > 0 ? Math.round((kttNotApprovedRecords / totalRecords) * 100) : 0
+    };
+  };
+
+  const statistics = calculateStatistics();
+
+  // Dữ liệu cho biểu đồ hình tròn
+  const pieChartData = [
+    { name: 'Đã thanh toán', value: statistics.paidRecords, color: '#52c41a' },
+    { name: 'Chưa thanh toán', value: statistics.unpaidRecords, color: '#ff4d4f' }
+  ];
+
+  // Dữ liệu cho biểu đồ KTV duyệt
+  const ktvPieChartData = [
+    { name: 'KTV đã duyệt', value: statistics.ktvApprovedRecords, color: '#1890ff' },
+    { name: 'KTV chưa duyệt', value: statistics.ktvNotApprovedRecords, color: '#faad14' }
+  ];
+
+  // Dữ liệu cho biểu đồ KTT duyệt
+  const kttPieChartData = [
+    { name: 'KTT đã duyệt', value: statistics.kttApprovedRecords, color: '#722ed1' },
+    { name: 'KTT chưa duyệt', value: statistics.kttNotApprovedRecords, color: '#eb2f96' }
+  ];
 
   // Hàm định dạng ngày tháng thành dd/mm/yyyy
   const formatDateToDDMMYYYY = (date: Date | string | number | null): string | null => {
@@ -756,8 +817,7 @@ export default function HomePage() {
           </div>
 
           {/* Table */}
-
-          <div className="overflow-x-auto max-h-[58vh] overflow-y-auto mt-1 rounded-lg shadow bg-white custom-scrollbar">
+          <div className="overflow-x-auto max-h-[80vh] overflow-y-auto mt-1 rounded-lg shadow bg-white custom-scrollbar">
             <DndContext
               collisionDetection={closestCenter}
               onDragEnd={handleDragEnd}
@@ -852,6 +912,136 @@ export default function HomePage() {
             </DndContext>
           </div>
 
+        </div>
+
+        {/* Báo cáo thống kê */}
+        <div className="mt-6">
+          <Card title="Báo cáo thống kê hồ sơ" className="shadow-lg">
+            <Row gutter={[16, 16]}>
+              {/* Thống kê tổng quan */}
+              <Col xs={24} sm={12} md={6}>
+                <Card className="text-center">
+                  <Statistic
+                    title="Tổng số hồ sơ"
+                    value={statistics.totalRecords}
+                    valueStyle={{ color: '#1890ff', fontSize: '24px' }}
+                  />
+                </Card>
+              </Col>
+              <Col xs={24} sm={12} md={6}>
+                <Card className="text-center">
+                  <Statistic
+                    title="Đã thanh toán (Thanh toán xong)"
+                    value={statistics.paidRecords}
+                    valueStyle={{ color: '#52c41a', fontSize: '24px' }}
+                    suffix={`(${statistics.paidPercentage}%)`}
+                  />
+                </Card>
+              </Col>
+              <Col xs={24} sm={12} md={6}>
+                <Card className="text-center">
+                  <Statistic
+                    title="KTV đã duyệt"
+                    value={statistics.ktvApprovedRecords}
+                    valueStyle={{ color: '#1890ff', fontSize: '24px' }}
+                    suffix={`(${statistics.ktvApprovedPercentage}%)`}
+                  />
+                </Card>
+              </Col>
+              <Col xs={24} sm={12} md={6}>
+                <Card className="text-center">
+                  <Statistic
+                    title="KTT đã duyệt"
+                    value={statistics.kttApprovedRecords}
+                    valueStyle={{ color: '#722ed1', fontSize: '24px' }}
+                    suffix={`(${statistics.kttApprovedPercentage}%)`}
+                  />
+                </Card>
+              </Col>
+            </Row>
+
+            {/* Biểu đồ hình tròn */}
+            <Row className="mt-6" gutter={[16, 16]}>
+              <Col xs={24} md={8}>
+                <Card title="Biểu đồ thanh toán" className="text-center">
+                  <div style={{ width: '100%', height: '250px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={pieChartData}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                          outerRadius={60}
+                          fill="#8884d8"
+                          dataKey="value"
+                        >
+                          {pieChartData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value, name) => [value, name]} />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Card>
+              </Col>
+              <Col xs={24} md={8}>
+                <Card title="Biểu đồ KTV duyệt" className="text-center">
+                  <div style={{ width: '100%', height: '250px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={ktvPieChartData}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                          outerRadius={60}
+                          fill="#8884d8"
+                          dataKey="value"
+                        >
+                          {ktvPieChartData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value, name) => [value, name]} />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Card>
+              </Col>
+              <Col xs={24} md={8}>
+                <Card title="Biểu đồ KTT duyệt" className="text-center">
+                  <div style={{ width: '100%', height: '250px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={kttPieChartData}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                          outerRadius={60}
+                          fill="#8884d8"
+                          dataKey="value"
+                        >
+                          {kttPieChartData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value, name) => [value, name]} />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Card>
+              </Col>
+            </Row>
+          </Card>
         </div>
       </div>
 
