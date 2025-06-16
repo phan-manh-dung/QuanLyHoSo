@@ -8,11 +8,12 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faTrash,
   faPen,
-  faFileExcel,
   faRightFromBracket,
+  faGear,
 } from '@fortawesome/free-solid-svg-icons';
 import AuthGuard from '../../src/components/AuthGuard';
-import { Drawer, Form, Input, Button, Space } from 'antd';
+import { Drawer, Form, Input, Button, Space, Card, Row, Col, Statistic } from 'antd';
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 
 import {
   SortableContext,
@@ -38,7 +39,7 @@ interface DataRow {
 
 // Type for Excel row
 interface ExcelRow {
-  [key: string]: string | number;
+  [key: string]: string | number | boolean | Date | null;
 }
 
 // Type for API response item
@@ -109,6 +110,137 @@ export default function HomePage() {
   const [form] = Form.useForm();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const rowsToDisplay = [...dataRowDB, ...dataColumn];
+  const [settingsDrawerVisible, setSettingsDrawerVisible] = useState(false);
+
+  // Tính toán thống kê
+  const calculateStatistics = () => {
+    const totalRecords = rowsToDisplay.length;
+    const paidRecords = rowsToDisplay.filter(row => {
+      const paymentStatus = row['thanh-toan-xong'];
+      return paymentStatus === 'X' || paymentStatus === 'x';
+    }).length;
+    const unpaidRecords = totalRecords - paidRecords;
+
+    // Thống kê KTV duyệt
+    const ktvApprovedRecords = rowsToDisplay.filter(row => {
+      const ktvStatus = row['ktv-duyet'];
+      return ktvStatus === 'X' || ktvStatus === 'x';
+    }).length;
+    const ktvNotApprovedRecords = totalRecords - ktvApprovedRecords;
+
+    // Thống kê KTT duyệt
+    const kttApprovedRecords = rowsToDisplay.filter(row => {
+      const kttStatus = row['ktt-duyet'];
+      return kttStatus === 'X' || kttStatus === 'x';
+    }).length;
+    const kttNotApprovedRecords = totalRecords - kttApprovedRecords;
+
+    // Thống kê theo người phụ trách hồ sơ
+    const staffStats = new Map();
+    
+    rowsToDisplay.forEach(row => {
+      const staffName = row['phu-trach-hs'] || 'Chưa phân công';
+      const isCompleted = row['ton-tai-va-huong-giai-quyet'] === 'Đã thanh toán xong' || 
+                         row['ton-tai-va-huong-giai-quyet'] === 'đã thanh toán xong';
+      
+      if (!staffStats.has(staffName)) {
+        staffStats.set(staffName, {
+          total: 0,
+          completed: 0,
+          notCompleted: 0
+        });
+      }
+      
+      const stats = staffStats.get(staffName);
+      stats.total += 1;
+      
+      if (isCompleted) {
+        stats.completed += 1;
+      } else {
+        stats.notCompleted += 1;
+      }
+    });
+
+    // Chuyển đổi Map thành Array và tính phần trăm
+    const staffStatistics = Array.from(staffStats.entries()).map(([staffName, stats]) => ({
+      staffName,
+      total: stats.total,
+      completed: stats.completed,
+      notCompleted: stats.notCompleted,
+      completionRate: stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0
+    }));
+
+    return {
+      totalRecords,
+      paidRecords,
+      unpaidRecords,
+      paidPercentage: totalRecords > 0 ? Math.round((paidRecords / totalRecords) * 100) : 0,
+      unpaidPercentage: totalRecords > 0 ? Math.round((unpaidRecords / totalRecords) * 100) : 0,
+      ktvApprovedRecords,
+      ktvNotApprovedRecords,
+      ktvApprovedPercentage: totalRecords > 0 ? Math.round((ktvApprovedRecords / totalRecords) * 100) : 0,
+      ktvNotApprovedPercentage: totalRecords > 0 ? Math.round((ktvNotApprovedRecords / totalRecords) * 100) : 0,
+      kttApprovedRecords,
+      kttNotApprovedRecords,
+      kttApprovedPercentage: totalRecords > 0 ? Math.round((kttApprovedRecords / totalRecords) * 100) : 0,
+      kttNotApprovedPercentage: totalRecords > 0 ? Math.round((kttNotApprovedRecords / totalRecords) * 100) : 0,
+      staffStatistics
+    };
+  };
+
+  const statistics = calculateStatistics();
+
+  // Dữ liệu cho biểu đồ hình tròn
+  const pieChartData = [
+    { name: 'Đã thanh toán', value: statistics.paidRecords, color: '#52c41a' },
+    { name: 'Chưa thanh toán', value: statistics.unpaidRecords, color: '#ff4d4f' }
+  ];
+
+  // Dữ liệu cho biểu đồ KTV duyệt
+  const ktvPieChartData = [
+    { name: 'KTV đã duyệt', value: statistics.ktvApprovedRecords, color: '#1890ff' },
+    { name: 'KTV chưa duyệt', value: statistics.ktvNotApprovedRecords, color: '#faad14' }
+  ];
+
+  // Dữ liệu cho biểu đồ KTT duyệt
+  const kttPieChartData = [
+    { name: 'KTT đã duyệt', value: statistics.kttApprovedRecords, color: '#722ed1' },
+    { name: 'KTT chưa duyệt', value: statistics.kttNotApprovedRecords, color: '#eb2f96' }
+  ];
+
+  // Hàm định dạng ngày tháng thành dd/mm/yyyy
+  const formatDateToDDMMYYYY = (date: Date | string | number | null): string | null => {
+    if (!date) return null;
+    let d: Date;
+
+    if (date instanceof Date) {
+      d = date;
+    } else if (typeof date === 'string' || typeof date === 'number') {
+      // Attempt to parse string/number to Date if needed, or assume it's already in a parsable format
+      // For this specific use case (from Excel's raw: false or serial number), it's likely a Date object or serial number
+      // For simplicity, we'll try to convert if it's a serial number
+      if (typeof date === 'number' && date > 10000 && date < 60000) { // Simple heuristic for Excel serial dates
+        const utc_days = Math.floor(date - 25569);
+        const utc_value = utc_days * 86400;
+        d = new Date(utc_value * 1000);
+      } else {
+        try {
+          d = new Date(date);
+          if (isNaN(d.getTime())) return String(date); // Return original if invalid date
+        } catch {
+          return String(date); // Return original if parsing fails
+        }
+      }
+    } else {
+      return null; // For other types
+    }
+
+    const day = d.getDate().toString().padStart(2, '0');
+    const month = (d.getMonth() + 1).toString().padStart(2, '0');
+    const year = d.getFullYear();
+
+    return `${day}/${month}/${year}`;
+  };
 
   // biến check admin để xác định quyền của user
   const idAd = process.env.NEXT_PUBLIC_ID_ADMIN;
@@ -174,7 +306,7 @@ export default function HomePage() {
     const utc_value = utc_days * 86400; // seconds
     const date_info = new Date(utc_value * 1000);
 
-    // Nếu muốn định dạng kiểu "dd/mm/yyyy"
+    // Định dạng kiểu "dd/mm/yyyy"
     const day = date_info.getDate().toString().padStart(2, '0');
     const month = (date_info.getMonth() + 1).toString().padStart(2, '0'); // tháng 0-based
     const year = date_info.getFullYear();
@@ -299,11 +431,11 @@ export default function HomePage() {
 
     reader.onload = async (e) => {
       const data = e.target?.result;
-      const workbook = XLSX.read(data, { type: 'binary' });
+      const workbook = XLSX.read(data, { type: 'binary', cellDates: true });
 
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
-      const json = XLSX.utils.sheet_to_json(worksheet) as ExcelRow[];
+      const json = XLSX.utils.sheet_to_json(worksheet, { raw: false }) as ExcelRow[];
 
       // Không cần thêm
       const jsonWithId = json.map((item) => ({
@@ -321,15 +453,22 @@ export default function HomePage() {
 
       // Map key dữ liệu theo labelToIdMap, không tạo
       const jsonWithMappedKeys = jsonWithId.map((row) => {
-        const newRow: Record<string, string | number> = {};
+        const newRow: Record<string, string | number | boolean | Date | null> = {};
 
         for (const key in row) {
           const mappedKey = labelToIdMap[key] ?? key;
-          let value = row[key];
-          if (mappedKey === 'ngay-tao' && typeof value === 'number') {
-            value = excelDateToJSDate(value);
+          const value = row[key];
+
+          // If value is already a Date object, format it
+          if (typeof value === 'object' && value !== null && value instanceof Date && !isNaN(value.getTime())) {
+            newRow[mappedKey] = formatDateToDDMMYYYY(value);
           }
-          newRow[mappedKey] = value;
+          // Otherwise, if it's a number and for 'ngay-tao', convert from Excel serial
+          else if (mappedKey === 'ngay-tao' && typeof value === 'number') {
+            newRow[mappedKey] = formatDateToDDMMYYYY(excelDateToJSDate(value));
+          } else {
+            newRow[mappedKey] = value;
+          }
         }
 
         return newRow;
@@ -345,7 +484,6 @@ export default function HomePage() {
         });
 
         const result = await res.json();
-        console.log('result', result);
 
         if (result.success === false) {
           toast.error(result.message || 'Lỗi hệ thống!');
@@ -368,9 +506,10 @@ export default function HomePage() {
 
         toast.success('Tải dữ liệu thành công!');
         if (fileInputRef.current) {
-          fileInputRef.current.value = ''; // reset file input
+          fileInputRef.current.value = ''; 
         }
         setFile(null);
+        setSettingsDrawerVisible(false);
       } catch (error) {
         console.error('Lỗi hệ thống:', error);
         toast.error('Lỗi hệ thống!');
@@ -401,7 +540,7 @@ export default function HomePage() {
         } else {
           const value = row[col.id];
           if (value instanceof Date) {
-            obj[col.label] = value.toLocaleDateString('vi-VN');
+            obj[col.label] = formatDateToDDMMYYYY(value);
           } else {
             obj[col.label] = value ?? '';
           }
@@ -429,25 +568,29 @@ export default function HomePage() {
     saveAs(fileBlob, finalName);
   };
 
-  // Hàm xử lý tìm kiếm
-  const handleSearch = () => {
-    if (!searchColumn || !searchValue) return;
-    const filtered = rowsToDisplay.filter((row) => {
-      const value = row[searchColumn];
-      return (
-        value !== undefined &&
-        value !== null &&
-        value.toString().toLowerCase().includes(searchValue.toLowerCase())
-      );
-    });
-    setFilteredRows(filtered);
-  };
-
   // Hàm hủy tìm kiếm
   const handleCancelSearch = () => {
     setFilteredRows(null);
     setSearchColumn('');
     setSearchValue('');
+  };
+
+  // Hàm search real-time khi người dùng nhập
+  const handleRealTimeSearch = (value: string) => {
+    setSearchValue(value);
+    if (!searchColumn || !value.trim()) {
+      setFilteredRows(null);
+      return;
+    }
+    const filtered = rowsToDisplay.filter((row) => {
+      const rowValue = row[searchColumn];
+      return (
+        rowValue !== undefined &&
+        rowValue !== null &&
+        rowValue.toString().toLowerCase().includes(value.toLowerCase())
+      );
+    });
+    setFilteredRows(filtered);
   };
 
   // Hàm fetch dữ liệu từ database (tách riêng để có thể gọi lại)
@@ -589,6 +732,13 @@ export default function HomePage() {
     form.resetFields();
   };
 
+  // Hàm đóng drawer tùy chỉnh
+  const handleCloseSettingsDrawer = () => {
+    setSettingsDrawerVisible(false);
+    setShowInput(false);
+    setNewColumnName(''); 
+  };
+
   // Hàm lưu thay đổi
   const handleSaveChanges = async (values: any) => {
     if (!selectedRow?._id) {
@@ -623,12 +773,12 @@ export default function HomePage() {
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-4 px-2 md:px-8">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-1 px-2 md:px-8">
         <div className="mx-auto">
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b pb-1 mb-1">
             <h1 className="text-4xl font-extrabold text-gray-800 mb-2 md:mb-0">
-              Task Tracker
+              Task Trakcer
             </h1>
             <div className="text-gray-700 text-lg flex items-center gap-2">
               <span>
@@ -662,90 +812,48 @@ export default function HomePage() {
                 onChange={(e) => {
                   setSearchColumn(e.target.value);
                   setSearchValue('');
+                  setFilteredRows(null);
                 }}
               >
-                <option value="">Cột</option>
                 {columns
-                  .filter((col) => col.id !== 'actions' && col.id !== 'id')
+                  .filter((col) => col.id !== 'actions' && col.id !== 'stt')
                   .map((col) => (
                     <option key={col.id} value={col.id}>
                       {col.label}
                     </option>
                   ))}
               </select>
-              {searchColumn && (
-                <>
-                  <input
-                    className="border rounded px-2 py-1 h-8 text-sm"
-                    placeholder={`Nhập giá trị...`}
-                    value={searchValue}
-                    onChange={(e) => setSearchValue(e.target.value)}
-                  />
-                  <button
-                    className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 cursor-pointer h-8"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      handleSearch();
-                    }}
-                    disabled={!searchValue}
-                  >
-                    Tìm
-                  </button>
-                  <button
-                    className="bg-gray-400 text-white px-3 py-1 rounded hover:bg-gray-500 cursor-pointer h-8"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      handleCancelSearch();
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </>
-              )}
+              <input
+                className="border rounded px-2 py-1 h-8 text-sm"
+                placeholder="Nhập giá trị để tìm kiếm..."
+                value={searchValue}
+                onChange={(e) => handleRealTimeSearch(e.target.value)}
+              />
+              <button
+                className="bg-gray-400 text-white px-3 py-1 rounded hover:bg-gray-500 cursor-pointer h-8"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleCancelSearch();
+                }}
+              >
+                Xóa
+              </button>
             </div>
 
-            {/* Add New Column */}
-            {showInput ? (
-              <div className="flex items-center gap-2">
-                <input
-                  value={newColumnName}
-                  onChange={(e) => setNewColumnName(e.target.value)}
-                  placeholder="Tên cột"
-                  className="px-2 py-1 border rounded h-8"
-                />
-                <button
-                  onClick={handleAddColumn}
-                  className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 cursor-pointer h-8"
-                >
-                  OK
-                </button>
-                <button
-                  onClick={() => {
-                    setShowInput(false);
-                    setNewColumnName('');
-                  }}
-                  className="bg-gray-400 text-white px-3 py-1 rounded hover:bg-gray-500 cursor-pointer h-8"
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              checkAdmin && (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setShowInput(true)}
-                    className="text-blue-600 hover:underline font-medium text-base cursor-pointer px-2 py-1 h-8"
-                  >
-                    + Thêm cột mới vào bảng
-                  </button>
-                </div>
-              )
+            {/* Settings icon to open drawer */}
+            {checkAdmin && (
+              <button
+                onClick={() => setSettingsDrawerVisible(true)}
+                className="text-gray-600 hover:text-gray-800 p-2 rounded-full transition-colors duration-200 cursor-pointer"
+                title="Tùy chọn"
+              >
+                <FontAwesomeIcon icon={faGear} size="lg" />
+              </button>
             )}
           </div>
 
           {/* Table */}
-
-          <div className="overflow-x-auto max-h-[68vh] overflow-y-auto mt-1 rounded-lg shadow bg-white custom-scrollbar">
+          <div className="overflow-x-auto max-h-[80vh] overflow-y-auto mt-1 rounded-lg shadow bg-white custom-scrollbar">
             <DndContext
               collisionDetection={closestCenter}
               onDragEnd={handleDragEnd}
@@ -815,7 +923,7 @@ export default function HomePage() {
                                     const value =
                                       row[col.id as keyof typeof row];
                                     if (value instanceof Date) {
-                                      return value.toLocaleDateString('vi-VN');
+                                      return formatDateToDDMMYYYY(value);
                                     }
                                     return value ?? 'null';
                                   })()}
@@ -824,60 +932,232 @@ export default function HomePage() {
                         )}
                       </tr>
                     ))}
+                    {filteredRows && filteredRows.length === 0 && (
+                      <tr>
+                        <td 
+                          colSpan={orderedColumns.length} 
+                          className="border px-3 py-8 text-center text-gray-500 bg-gray-50"
+                        >
+                          Không có dữ liệu phù hợp với tìm kiếm
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </SortableContext>
             </DndContext>
           </div>
 
-          {/* Upload & Export */}
-          {checkAdmin && (
-            <div className="fixed bottom-4 left-0 w-full flex flex-col md:flex-row md:items-center gap-4 justify-between px-10 ">
-              <div className="flex flex-col md:flex-row md:items-center gap-4 mt-6">
-                <form className="flex items-center gap-2 bg-white p-1 rounded-lg shadow">
-                  <label className="font-medium text-green-700">
-                    <FontAwesomeIcon icon={faFileExcel} size="2x" />
-                  </label>
-                  <input
-                    onChange={handleFileChange}
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".xlsx, .xls"
-                    className="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                  />
-                  <button
-                    onClick={handleFileUpload}
-                    type="button"
-                    className="ml-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition cursor-pointer"
-                  >
-                    Upload
-                  </button>
-                </form>
-                <button
-                  className="px-2 py-1 bg-green-600 text-white rounded-lg font-medium shadow hover:bg-green-700 transition w-fit cursor-pointer"
-                  onClick={handleExportToExcel}
-                >
-                  Export Data Table to Excel
-                </button>
-              </div>
+        </div>
 
-              {/* Download Template */}
-              <div className="mt-10">
-                <a
-                  onClick={handleDownloadTemplate}
-                  className="text-blue-600 hover:underline font-medium text-base cursor-pointer"
-                >
-                  Download Template{' '}
-                </a>
-                <a
-                  href="#"
-                  className="text-blue-600 hover:underline font-medium text-base"
-                >
-                  Generate Report{' '}
-                </a>
-              </div>
-            </div>
-          )}
+        {/* Báo cáo thống kê */}
+        <div className="mt-6">
+          <Card title="Báo cáo thống kê hồ sơ" className="shadow-lg">
+            <Row gutter={[16, 16]}>
+              {/* Thống kê tổng quan */}
+              <Col xs={24} sm={12} md={6}>
+                <Card className="text-center">
+                  <Statistic
+                    title="Tổng số hồ sơ"
+                    value={statistics.totalRecords}
+                    valueStyle={{ color: '#1890ff', fontSize: '24px' }}
+                  />
+                </Card>
+              </Col>
+              <Col xs={24} sm={12} md={6}>
+                <Card className="text-center">
+                  <Statistic
+                    title="Đã thanh toán (Thanh toán xong)"
+                    value={statistics.paidRecords}
+                    valueStyle={{ color: '#52c41a', fontSize: '24px' }}
+                    suffix={`(${statistics.paidPercentage}%)`}
+                  />
+                </Card>
+              </Col>
+              <Col xs={24} sm={12} md={6}>
+                <Card className="text-center">
+                  <Statistic
+                    title="KTV đã duyệt"
+                    value={statistics.ktvApprovedRecords}
+                    valueStyle={{ color: '#1890ff', fontSize: '24px' }}
+                    suffix={`(${statistics.ktvApprovedPercentage}%)`}
+                  />
+                </Card>
+              </Col>
+              <Col xs={24} sm={12} md={6}>
+                <Card className="text-center">
+                  <Statistic
+                    title="KTT đã duyệt"
+                    value={statistics.kttApprovedRecords}
+                    valueStyle={{ color: '#722ed1', fontSize: '24px' }}
+                    suffix={`(${statistics.kttApprovedPercentage}%)`}
+                  />
+                </Card>
+              </Col>
+            </Row>
+
+            {/* Biểu đồ hình tròn */}
+            <Row className="mt-6" gutter={[16, 16]}>
+              <Col xs={24} md={8}>
+                <Card title="Biểu đồ thanh toán" className="text-center">
+                  <div style={{ width: '100%', height: '250px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={pieChartData}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                          outerRadius={60}
+                          fill="#8884d8"
+                          dataKey="value"
+                        >
+                          {pieChartData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value, name) => [value, name]} />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Card>
+              </Col>
+              <Col xs={24} md={8}>
+                <Card title="Biểu đồ KTV duyệt" className="text-center">
+                  <div style={{ width: '100%', height: '250px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={ktvPieChartData}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                          outerRadius={60}
+                          fill="#8884d8"
+                          dataKey="value"
+                        >
+                          {ktvPieChartData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value, name) => [value, name]} />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Card>
+              </Col>
+              <Col xs={24} md={8}>
+                <Card title="Biểu đồ KTT duyệt" className="text-center">
+                  <div style={{ width: '100%', height: '250px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={kttPieChartData}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                          outerRadius={60}
+                          fill="#8884d8"
+                          dataKey="value"
+                        >
+                          {kttPieChartData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value, name) => [value, name]} />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Card>
+              </Col>
+            </Row>
+          </Card>
+        </div>
+
+        {/* Thống kê theo người phụ trách */}
+        <div className="mt-6">
+          <Card title="Thống kê theo người phụ trách hồ sơ" className="shadow-lg">
+            <Row gutter={[16, 16]}>
+              {statistics.staffStatistics.map((staff, index) => (
+                <Col xs={24} sm={12} key={index}>
+                  <Card 
+                    title={staff.staffName} 
+                    className="text-center"
+                    style={{ 
+                      borderLeft: `4px solid ${staff.completionRate >= 80 ? '#52c41a' : staff.completionRate >= 50 ? '#faad14' : '#ff4d4f'}` 
+                    }}
+                  >
+                    <Row gutter={[8, 8]}>
+                      <Col span={8}>
+                        <Statistic
+                          title="Tổng hồ sơ"
+                          value={staff.total}
+                          valueStyle={{ color: '#1890ff', fontSize: '18px' }}
+                        />
+                      </Col>
+                      <Col span={8}>
+                        <Statistic
+                          title="Đã hoàn thành"
+                          value={staff.completed}
+                          valueStyle={{ color: '#52c41a', fontSize: '18px' }}
+                        />
+                      </Col>
+                      <Col span={8}>
+                        <Statistic
+                          title="Chưa hoàn thành"
+                          value={staff.notCompleted}
+                          valueStyle={{ color: '#ff4d4f', fontSize: '18px' }}
+                        />
+                      </Col>
+                    </Row>
+                    <div className="mt-3">
+                      <Statistic
+                        title="Tỷ lệ hoàn thành"
+                        value={staff.completionRate}
+                        suffix="%"
+                        valueStyle={{ 
+                          color: staff.completionRate >= 80 ? '#52c41a' : staff.completionRate >= 50 ? '#faad14' : '#ff4d4f',
+                          fontSize: '20px',
+                          fontWeight: 'bold'
+                        }}
+                      />
+                    </div>
+                    
+                    {/* Biểu đồ mini cho từng người */}
+                    <div style={{ width: '100%', height: '120px', marginTop: '10px' }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={[
+                              { name: 'Đã hoàn thành', value: staff.completed, color: '#52c41a' },
+                              { name: 'Chưa hoàn thành', value: staff.notCompleted, color: '#ff4d4f' }
+                            ]}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                            outerRadius={40}
+                            fill="#8884d8"
+                            dataKey="value"
+                          >
+                            <Cell fill="#52c41a" />
+                            <Cell fill="#ff4d4f" />
+                          </Pie>
+                          <Tooltip formatter={(value, name) => [value, name]} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </Card>
+                </Col>
+              ))}
+            </Row>
+          </Card>
         </div>
       </div>
 
@@ -888,7 +1168,7 @@ export default function HomePage() {
         width={600}
         onClose={handleCloseDrawer}
         open={drawerVisible}
-        footer={
+        footer={(
           <div style={{ textAlign: 'right' }}>
             <Space>
               <Button onClick={handleCloseDrawer}>Hủy</Button>
@@ -897,7 +1177,7 @@ export default function HomePage() {
               </Button>
             </Space>
           </div>
-        }
+        )}
       >
         <Form
           form={form}
@@ -916,6 +1196,89 @@ export default function HomePage() {
         </Form.Item>
             ))}
         </Form>
+      </Drawer>
+
+      {/* Settings Drawer */}
+      <Drawer
+        title="Tùy chọn chỉnh sửa"
+        placement="right"
+        width={400}
+        onClose={handleCloseSettingsDrawer}
+        open={settingsDrawerVisible}
+        footer={(
+          <div style={{ textAlign: 'right' }}>
+            <Space>
+              <Button onClick={handleCloseSettingsDrawer}>Đóng</Button>
+            </Space>
+          </div>
+        )}
+      >
+        {/* Add New Column Section inside Drawer */}
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold mb-2">Thêm cột mới</h3>
+          {showInput ? (
+            <div className="flex items-center gap-2">
+              <Input
+                value={newColumnName}
+                onChange={(e) => setNewColumnName(e.target.value)}
+                placeholder="Tên cột"
+              />
+              <Button type="primary" onClick={handleAddColumn}>
+                OK
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowInput(false);
+                  setNewColumnName('');
+                }}
+              >
+                Hủy
+              </Button>
+            </div>
+          ) : (
+            <Button onClick={() => setShowInput(true)}>
+              + Thêm cột mới vào bảng
+            </Button>
+          )}
+        </div>
+
+        {/* Upload File Section inside Drawer */}
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold mb-2">Tải lên dữ liệu Excel</h3>
+          <form className="flex flex-col gap-2">
+            <input
+              onChange={handleFileChange}
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx, .xls"
+              className="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+            />
+            <Button type="primary" onClick={handleFileUpload}>
+              Upload
+            </Button>
+          </form>
+        </div>
+
+        {/* Export Data Table to Excel Section inside Drawer */}
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold mb-2">Xuất dữ liệu</h3>
+          <Button onClick={handleExportToExcel}>
+            Export Data Table to Excel
+          </Button>
+        </div>
+
+        {/* Download Template & Generate Report Section inside Drawer */}
+        <div>
+          <h3 className="text-lg font-semibold mb-2">Mẫu và Báo cáo</h3>
+          <div className="flex flex-col gap-2">
+            <Button onClick={handleDownloadTemplate}>
+              Download Template
+            </Button>
+            <Button>
+              Generate Report
+            </Button>
+          </div>
+        </div>
       </Drawer>
     </AuthGuard>
   );
