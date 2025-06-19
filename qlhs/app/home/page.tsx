@@ -12,7 +12,7 @@ import {
   faGear,
 } from '@fortawesome/free-solid-svg-icons';
 import AuthGuard from '../../src/components/AuthGuard';
-import { Drawer, Form, Input, Button, Space, Card, Row, Col, Statistic } from 'antd';
+import { Drawer, Form, Input, Button, Space, Card, Row, Col, Statistic, Popconfirm } from 'antd';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 
 import {
@@ -773,7 +773,7 @@ export default function HomePage() {
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-1 px-2 md:px-8">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-1 px-1 md:px-4">
         <div className="mx-auto">
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b pb-1 mb-1">
@@ -789,67 +789,76 @@ export default function HomePage() {
                 </span>
               </span>
               <span className="mx-1">|</span>
-              <a
-                href="#"
-                className="text-blue-600 hover:underline font-medium"
-                onClick={handleLogout}
+              <Popconfirm
+                title="Bạn có muốn đăng xuất không?"
+                onConfirm={handleLogout}
+                okText="Có"
+                cancelText="Không"
               >
-                <FontAwesomeIcon icon={faRightFromBracket} size="lg" />
-              </a>
+                <a
+                  href="#"
+                  className="text-blue-600 hover:underline font-medium"
+                  onClick={e => e.preventDefault()}
+                >
+                  <FontAwesomeIcon icon={faRightFromBracket} size="lg" />
+                </a>
+              </Popconfirm>
+              {checkAdmin && (
+                <button
+                  onClick={() => setSettingsDrawerVisible(true)}
+                  className="text-gray-600 hover:text-gray-800 p-2 rounded-full transition-colors duration-200 cursor-pointer"
+                  title="Tùy chọn"
+                >
+                  <FontAwesomeIcon icon={faGear} size="lg" />
+                </button>
+              )}
             </div>
           </div>
 
           {/* Search & Add New Column Section */}
-          <div className="flex items-center justify-between border-b pb-1 mb-3">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b pb-1 mb-3 gap-2">
             {/* Search box góc trái */}
-            <div className="flex items-center gap-2">
-              <label className="font-medium text-gray-700 text-base h-8 flex items-center">
-                Tìm theo
-              </label>
-              <select
-                className="border rounded px-2 py-1 h-8"
-                value={searchColumn}
-                onChange={(e) => {
-                  setSearchColumn(e.target.value);
-                  setSearchValue('');
-                  setFilteredRows(null);
-                }}
-              >
-                {columns
-                  .filter((col) => col.id !== 'actions' && col.id !== 'stt')
-                  .map((col) => (
-                    <option key={col.id} value={col.id}>
-                      {col.label}
-                    </option>
-                  ))}
-              </select>
-              <input
-                className="border rounded px-2 py-1 h-8 text-sm"
-                placeholder="Nhập giá trị để tìm kiếm..."
-                value={searchValue}
-                onChange={(e) => handleRealTimeSearch(e.target.value)}
-              />
-              <button
-                className="bg-gray-400 text-white px-3 py-1 rounded hover:bg-gray-500 cursor-pointer h-8"
-                onClick={(e) => {
-                  e.preventDefault();
-                  handleCancelSearch();
-                }}
-              >
-                Xóa
-              </button>
+            <div className="flex flex-col xs:flex-col sm:flex-col md:flex-row md:items-center gap-2 w-full md:w-auto">
+              <div className="flex items-center gap-2">
+                <label className="font-medium text-gray-700 text-base h-8 flex items-center">
+                  Tìm theo
+                </label>
+                <select
+                  className="border rounded px-2 py-1 h-8"
+                  value={searchColumn}
+                  onChange={(e) => {
+                    setSearchColumn(e.target.value);
+                    setSearchValue('');
+                    setFilteredRows(null);
+                  }}
+                >
+                  {columns
+                    .filter((col) => col.id !== 'actions' && col.id !== 'stt')
+                    .map((col) => (
+                      <option key={col.id} value={col.id}>
+                        {col.label}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div className="flex gap-2 w-full md:w-auto">
+                <input
+                  className="border rounded px-2 py-1 h-8 text-sm flex-1 min-w-0"
+                  placeholder="Nhập giá trị để tìm kiếm..."
+                  value={searchValue}
+                  onChange={(e) => handleRealTimeSearch(e.target.value)}
+                />
+                <button
+                  className="bg-gray-400 text-white px-3 py-1 rounded hover:bg-gray-500 cursor-pointer h-8"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleCancelSearch();
+                  }}
+                >
+                  Xóa
+                </button>
+              </div>
             </div>
-
-            {/* Settings icon to open drawer */}
-            {checkAdmin && (
-              <button
-                onClick={() => setSettingsDrawerVisible(true)}
-                className="text-gray-600 hover:text-gray-800 p-2 rounded-full transition-colors duration-200 cursor-pointer"
-                title="Tùy chọn"
-              >
-                <FontAwesomeIcon icon={faGear} size="lg" />
-              </button>
-            )}
           </div>
 
           {/* Table */}
