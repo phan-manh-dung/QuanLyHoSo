@@ -773,7 +773,7 @@ export default function HomePage() {
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-1 px-1 md:px-4">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-1 px-2 md:px-4">
         <div className="mx-auto">
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b pb-1 mb-1">
