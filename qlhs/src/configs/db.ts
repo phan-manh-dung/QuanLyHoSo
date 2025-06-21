@@ -1,15 +1,14 @@
 import mongoose from "mongoose";
 
-const URL_DATABASE_MONGODB = process.env.URL_DATABASE_MONGODB || "";
+const URL_DATABASE_MONGODB_TEST = process.env.URL_DATABASE_MONGODB_TEST || "";
 
-if (!URL_DATABASE_MONGODB) {
-  throw new Error("Please define the URL_DATABASE_MONGODB environment variable inside .env");
+if (!URL_DATABASE_MONGODB_TEST) {
+  throw new Error("Please define the URL_DATABASE_MONGODB_TEST environment variable inside .env");
 }
 
 export async function connectToDatabase() {
   try {
-    await mongoose.connect(URL_DATABASE_MONGODB);
-    console.log("✅ MongoDB connected successfully");
+    await mongoose.connect(URL_DATABASE_MONGODB_TEST);
   } catch (error) {
     console.error("❌ MongoDB connection error:", error);
   }

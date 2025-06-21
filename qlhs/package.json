@@ -24,6 +24,7 @@
     "clsx": "^2.1.1",
     "file-saver": "^2.0.5",
     "jsonwebtoken": "^9.0.2",
+    "jwt-decode": "^4.0.0",
     "mongoose": "^8.15.2",
     "next": "15.3.3",
     "react": "^19.0.0",
@@ -34,6 +35,7 @@
     "recharts": "^2.15.3",
     "redux-persist": "^6.0.0",
     "slugify": "^1.6.6",
+    "sweetalert2": "^11.22.0",
     "tailwind-merge": "^2.5.4",
     "xlsx": "^0.18.5"
   },
