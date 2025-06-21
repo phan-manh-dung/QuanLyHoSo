@@ -16,7 +16,7 @@ export interface IUser extends Document {
 
 const userSchema = new Schema<IUser>({
   idUser: { type: String, required: true, unique: true },
-  username: { type: String, required: true, unique: true },
+  username: { type: String, required: true, unique: true , index:true },
   password: { type: String, required: true },
   fullName: { type: String },
   role: { type: String, default: 'user', enum: ['adminql', 'user'] },

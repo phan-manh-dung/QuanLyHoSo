@@ -82,3 +82,10 @@ export async function updateRow(id: string, values: Record<string, any>) {
   
   return updatedRow;
 }
+
+export async function insertRow(data: Record<string, any>) {
+  await connectToDatabase();
+  const rowToInsert = { values: new Map(Object.entries(data)) };
+  const inserted = await DataColumn.create(rowToInsert);
+  return inserted;
+}

@@ -1,9 +1,9 @@
 'use client';
 import React, { useEffect, useRef, useState } from 'react';
 import { DndContext, closestCenter } from '@dnd-kit/core';
-import type { DragEndEvent } from '@dnd-kit/core';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
+import Swal from 'sweetalert2';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faTrash,
@@ -12,17 +12,36 @@ import {
   faGear,
 } from '@fortawesome/free-solid-svg-icons';
 import AuthGuard from '../../src/components/AuthGuard';
-import { Drawer, Form, Input, Button, Space, Card, Row, Col, Statistic, Popconfirm } from 'antd';
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import {
+  Drawer,
+  Form,
+  Input,
+  Button,
+  Space,
+  Card,
+  Row,
+  Col,
+  Statistic,
+  Popconfirm,
+  Modal,
+} from 'antd';
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Legend,
+  Tooltip,
+} from 'recharts';
 
 import {
   SortableContext,
   useSortable,
-  arrayMove,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import toast from 'react-hot-toast';
+import { formatDateToDDMMYYYY } from '../../src/utils';
 
 // Type for all columns
 interface ColumnType {
@@ -70,7 +89,7 @@ function SortableHeader({
     <th
       ref={setNodeRef}
       style={style}
-      className="px-3 py-2 font-bold border bg-blue-100 sticky top-0 z-10 cursor-move relative group"
+      className="px-3 py-2 font-bold border bg-blue-100 sticky top-0 z-10 cursor-move relative group select-none"
     >
       <div className="flex items-center justify-between">
         <div {...attributes} {...listeners} className="flex-1">
@@ -111,138 +130,10 @@ export default function HomePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const rowsToDisplay = [...dataRowDB, ...dataColumn];
   const [settingsDrawerVisible, setSettingsDrawerVisible] = useState(false);
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [reportForm] = Form.useForm();
 
-  // Tính toán thống kê
-  const calculateStatistics = () => {
-    const totalRecords = rowsToDisplay.length;
-    const paidRecords = rowsToDisplay.filter(row => {
-      const paymentStatus = row['thanh-toan-xong'];
-      return paymentStatus === 'X' || paymentStatus === 'x';
-    }).length;
-    const unpaidRecords = totalRecords - paidRecords;
-
-    // Thống kê KTV duyệt
-    const ktvApprovedRecords = rowsToDisplay.filter(row => {
-      const ktvStatus = row['ktv-duyet'];
-      return ktvStatus === 'X' || ktvStatus === 'x';
-    }).length;
-    const ktvNotApprovedRecords = totalRecords - ktvApprovedRecords;
-
-    // Thống kê KTT duyệt
-    const kttApprovedRecords = rowsToDisplay.filter(row => {
-      const kttStatus = row['ktt-duyet'];
-      return kttStatus === 'X' || kttStatus === 'x';
-    }).length;
-    const kttNotApprovedRecords = totalRecords - kttApprovedRecords;
-
-    // Thống kê theo người phụ trách hồ sơ
-    const staffStats = new Map();
-    
-    rowsToDisplay.forEach(row => {
-      const staffName = row['phu-trach-hs'] || 'Chưa phân công';
-      const isCompleted = row['ton-tai-va-huong-giai-quyet'] === 'Đã thanh toán xong' || 
-                         row['ton-tai-va-huong-giai-quyet'] === 'đã thanh toán xong';
-      
-      if (!staffStats.has(staffName)) {
-        staffStats.set(staffName, {
-          total: 0,
-          completed: 0,
-          notCompleted: 0
-        });
-      }
-      
-      const stats = staffStats.get(staffName);
-      stats.total += 1;
-      
-      if (isCompleted) {
-        stats.completed += 1;
-      } else {
-        stats.notCompleted += 1;
-      }
-    });
-
-    // Chuyển đổi Map thành Array và tính phần trăm
-    const staffStatistics = Array.from(staffStats.entries()).map(([staffName, stats]) => ({
-      staffName,
-      total: stats.total,
-      completed: stats.completed,
-      notCompleted: stats.notCompleted,
-      completionRate: stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0
-    }));
-
-    return {
-      totalRecords,
-      paidRecords,
-      unpaidRecords,
-      paidPercentage: totalRecords > 0 ? Math.round((paidRecords / totalRecords) * 100) : 0,
-      unpaidPercentage: totalRecords > 0 ? Math.round((unpaidRecords / totalRecords) * 100) : 0,
-      ktvApprovedRecords,
-      ktvNotApprovedRecords,
-      ktvApprovedPercentage: totalRecords > 0 ? Math.round((ktvApprovedRecords / totalRecords) * 100) : 0,
-      ktvNotApprovedPercentage: totalRecords > 0 ? Math.round((ktvNotApprovedRecords / totalRecords) * 100) : 0,
-      kttApprovedRecords,
-      kttNotApprovedRecords,
-      kttApprovedPercentage: totalRecords > 0 ? Math.round((kttApprovedRecords / totalRecords) * 100) : 0,
-      kttNotApprovedPercentage: totalRecords > 0 ? Math.round((kttNotApprovedRecords / totalRecords) * 100) : 0,
-      staffStatistics
-    };
-  };
-
-  const statistics = calculateStatistics();
-
-  // Dữ liệu cho biểu đồ hình tròn
-  const pieChartData = [
-    { name: 'Đã thanh toán', value: statistics.paidRecords, color: '#52c41a' },
-    { name: 'Chưa thanh toán', value: statistics.unpaidRecords, color: '#ff4d4f' }
-  ];
-
-  // Dữ liệu cho biểu đồ KTV duyệt
-  const ktvPieChartData = [
-    { name: 'KTV đã duyệt', value: statistics.ktvApprovedRecords, color: '#1890ff' },
-    { name: 'KTV chưa duyệt', value: statistics.ktvNotApprovedRecords, color: '#faad14' }
-  ];
-
-  // Dữ liệu cho biểu đồ KTT duyệt
-  const kttPieChartData = [
-    { name: 'KTT đã duyệt', value: statistics.kttApprovedRecords, color: '#722ed1' },
-    { name: 'KTT chưa duyệt', value: statistics.kttNotApprovedRecords, color: '#eb2f96' }
-  ];
-
-  // Hàm định dạng ngày tháng thành dd/mm/yyyy
-  const formatDateToDDMMYYYY = (date: Date | string | number | null): string | null => {
-    if (!date) return null;
-    let d: Date;
-
-    if (date instanceof Date) {
-      d = date;
-    } else if (typeof date === 'string' || typeof date === 'number') {
-      // Attempt to parse string/number to Date if needed, or assume it's already in a parsable format
-      // For this specific use case (from Excel's raw: false or serial number), it's likely a Date object or serial number
-      // For simplicity, we'll try to convert if it's a serial number
-      if (typeof date === 'number' && date > 10000 && date < 60000) { // Simple heuristic for Excel serial dates
-        const utc_days = Math.floor(date - 25569);
-        const utc_value = utc_days * 86400;
-        d = new Date(utc_value * 1000);
-      } else {
-        try {
-          d = new Date(date);
-          if (isNaN(d.getTime())) return String(date); // Return original if invalid date
-        } catch {
-          return String(date); // Return original if parsing fails
-        }
-      }
-    } else {
-      return null; // For other types
-    }
-
-    const day = d.getDate().toString().padStart(2, '0');
-    const month = (d.getMonth() + 1).toString().padStart(2, '0');
-    const year = d.getFullYear();
-
-    return `${day}/${month}/${year}`;
-  };
-
-  // biến check admin để xác định quyền của user
+    // biến check admin để xác định quyền của user
   const idAd = process.env.NEXT_PUBLIC_ID_ADMIN;
   const checkAdmin =
     userData?.username === 'admin' && userData?.role === 'adminql' && idAd
@@ -256,33 +147,189 @@ export default function HomePage() {
     return actionsCol ? [actionsCol, ...otherCols] : columns;
   }, [columns]);
 
+  // Tính toán thống kê
+  const calculateStatistics = () => {
+    // biến lưu trữ tổng số dòng dữ liệu
+    const totalRecords = rowsToDisplay.length;
+    // Thống kê đã thanh toán
+    const paidRecords = rowsToDisplay.filter((row) => {
+      const paymentStatus = row['thanh-toan-xong'];
+      return paymentStatus === 'X' || paymentStatus === 'x';
+    }).length;
+    // Tính số dòng chưa thanh toán
+    const unpaidRecords = totalRecords - paidRecords;
+
+    // Thống kê KTV duyệt
+    const ktvApprovedRecords = rowsToDisplay.filter((row) => {
+      const ktvStatus = row['ktv-duyet'];
+      return ktvStatus === 'X' || ktvStatus === 'x';
+    }).length;
+    const ktvNotApprovedRecords = totalRecords - ktvApprovedRecords;
+
+    // Thống kê KTT duyệt
+    const kttApprovedRecords = rowsToDisplay.filter((row) => {
+      const kttStatus = row['ktt-duyet'];
+      return kttStatus === 'X' || kttStatus === 'x';
+    }).length;
+    const kttNotApprovedRecords = totalRecords - kttApprovedRecords;
+
+    // Thống kê theo người phụ trách hồ sơ
+    const staffStats = new Map();
+    rowsToDisplay.forEach((row) => {
+      const staffName = row['phu-trach-hs'] || 'Chưa phân công';
+      const rawValue = row['ton-tai-va-huong-giai-quyet'];
+      const isCompleted =
+        typeof rawValue === 'string' &&
+        rawValue.toLowerCase() === 'đã thanh toán xong';
+
+      if (!staffStats.has(staffName)) {
+        staffStats.set(staffName, {
+          total: 0,
+          completed: 0,
+          notCompleted: 0,
+        });
+      }
+
+      const stats = staffStats.get(staffName);
+      stats.total += 1;
+
+      if (isCompleted) {
+        stats.completed += 1;
+      } else {
+        stats.notCompleted += 1;
+      }
+    });
+
+    // Chuyển đổi Map thành Array và tính phần trăm
+    const staffStatistics = Array.from(staffStats.entries()).map(
+      ([staffName, stats]) => ({
+        staffName,
+        total: stats.total,
+        completed: stats.completed,
+        notCompleted: stats.notCompleted,
+        completionRate:
+          stats.total > 0
+            ? Math.round((stats.completed / stats.total) * 100)
+            : 0,
+      })
+    );
+
+    return {
+      totalRecords,
+      paidRecords,
+      unpaidRecords,
+      paidPercentage:
+        totalRecords > 0 ? Math.round((paidRecords / totalRecords) * 100) : 0,
+      unpaidPercentage:
+        totalRecords > 0 ? Math.round((unpaidRecords / totalRecords) * 100) : 0,
+      ktvApprovedRecords,
+      ktvNotApprovedRecords,
+      ktvApprovedPercentage:
+        totalRecords > 0
+          ? Math.round((ktvApprovedRecords / totalRecords) * 100)
+          : 0,
+      ktvNotApprovedPercentage:
+        totalRecords > 0
+          ? Math.round((ktvNotApprovedRecords / totalRecords) * 100)
+          : 0,
+      kttApprovedRecords,
+      kttNotApprovedRecords,
+      kttApprovedPercentage:
+        totalRecords > 0
+          ? Math.round((kttApprovedRecords / totalRecords) * 100)
+          : 0,
+      kttNotApprovedPercentage:
+        totalRecords > 0
+          ? Math.round((kttNotApprovedRecords / totalRecords) * 100)
+          : 0,
+      staffStatistics,
+    };
+  };
+
+  const statistics = calculateStatistics();
+
+  // Dữ liệu cho biểu đồ hình tròn đã thanh toán
+  const pieChartData = [
+    { name: 'Đã thanh toán', value: statistics.paidRecords, color: '#52c41a' },
+    {
+      name: 'Chưa thanh toán',
+      value: statistics.unpaidRecords,
+      color: '#ff4d4f',
+    },
+  ];
+
+  // Dữ liệu cho biểu đồ KTV duyệt
+  const ktvPieChartData = [
+    {
+      name: 'KTV đã duyệt',
+      value: statistics.ktvApprovedRecords,
+      color: '#1890ff',
+    },
+    {
+      name: 'KTV chưa duyệt',
+      value: statistics.ktvNotApprovedRecords,
+      color: '#faad14',
+    },
+  ];
+
+  // Dữ liệu cho biểu đồ KTT duyệt
+  const kttPieChartData = [
+    {
+      name: 'KTT đã duyệt',
+      value: statistics.kttApprovedRecords,
+      color: '#722ed1',
+    },
+    {
+      name: 'KTT chưa duyệt',
+      value: statistics.kttNotApprovedRecords,
+      color: '#eb2f96',
+    },
+  ];
+
   // Lấy dữ liệu cột từ API khi component mount
   useEffect(() => {
-    const fetchColumns = async () => {
+    const initializeData = async () => {
       try {
-        const res = await fetch('/api/column');
-        const data = await res.json();
-        // Thêm cột actions vào cuối danh sách cột
-        const columnsWithActions = [
-          ...data,
+        // Load song song cả columns và data rows để tăng tốc độ
+        const [columnsRes, dataRes] = await Promise.all([
+          fetch('/api/column'),
+          fetch('/api/upload'),
+        ]);
+
+        // Xử lý columns
+        const columnsData = await columnsRes.json();
+        const columnsWithSttAndActions = [
+          { id: 'stt', label: 'STT', type: 'stt' },
+          ...columnsData,
           {
             id: 'actions',
             label: 'AT',
             type: 'actions',
           },
         ];
-        setColumns(columnsWithActions);
+        setColumns(columnsWithSttAndActions);
+
+        // Xử lý data rows
+        const dataRowsData = await dataRes.json();
+        const flattened = dataRowsData.map((item: ApiResponseItem) => {
+          const flatRow: DataRow = {
+            _id: item._id,
+          };
+
+          for (const [key, value] of Object.entries(item.values || {})) {
+            flatRow[key] = value;
+          }
+
+          return flatRow;
+        });
+
+        setDataRowDB(flattened);
       } catch (error) {
-        console.error('Failed to fetch columns:', error);
+        console.error('Failed to fetch initial data:', error);
       }
     };
 
-    fetchColumns();
-  }, []);
-
-  // lấy dữ liệu cột từ API khi component mount
-  useEffect(() => {
-    fetchDataRows();
+    initializeData();
   }, []);
 
   // Lấy thông tin user từ localStorage
@@ -299,20 +346,6 @@ export default function HomePage() {
       });
     }
   }, []);
-
-  // Chuyển đổi ngày từ định dạng Excel sang định dạng JS Date
-  function excelDateToJSDate(serial: number): string {
-    const utc_days = Math.floor(serial - 25569);
-    const utc_value = utc_days * 86400; // seconds
-    const date_info = new Date(utc_value * 1000);
-
-    // Định dạng kiểu "dd/mm/yyyy"
-    const day = date_info.getDate().toString().padStart(2, '0');
-    const month = (date_info.getMonth() + 1).toString().padStart(2, '0'); // tháng 0-based
-    const year = date_info.getFullYear();
-
-    return `${day}/${month}/${year}`;
-  }
 
   // Hàm thêm cột mới
   const handleAddColumn = async () => {
@@ -357,24 +390,6 @@ export default function HomePage() {
     } catch (error) {
       toast.error(`Lỗi: ${error}`);
     }
-  };
-
-  // Hàm xử lý kết thúc kéo thả
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-
-    const oldIndex = columns.findIndex((col) => col.id === active.id);
-    const newIndex = columns.findIndex((col) => col.id === over.id);
-
-    // Không cho kéo "Actions" đi chỗ khác
-    if (
-      columns[oldIndex].id === 'actions' ||
-      columns[newIndex].id === 'actions'
-    )
-      return;
-
-    setColumns(arrayMove(columns, oldIndex, newIndex));
   };
 
   // Hàm download file Excel
@@ -435,12 +450,9 @@ export default function HomePage() {
 
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
-      const json = XLSX.utils.sheet_to_json(worksheet, { raw: false }) as ExcelRow[];
-
-      // Không cần thêm
-      const jsonWithId = json.map((item) => ({
-        ...item,
-      }));
+      const json = XLSX.utils.sheet_to_json(worksheet, {
+        raw: false,
+      }) as ExcelRow[];
 
       // Tạo map label sang id từ columns
       const labelToIdMap = columns.reduce(
@@ -451,21 +463,49 @@ export default function HomePage() {
         {} as Record<string, string>
       );
 
-      // Map key dữ liệu theo labelToIdMap, không tạo
-      const jsonWithMappedKeys = jsonWithId.map((row) => {
-        const newRow: Record<string, string | number | boolean | Date | null> = {};
+      // Map key dữ liệu theo labelToIdMap và xử lý ngày tháng
+      const jsonWithMappedKeys = json.map((row) => {
+        const newRow: Record<string, string | number | boolean | Date | null> =
+          {};
 
         for (const key in row) {
           const mappedKey = labelToIdMap[key] ?? key;
           const value = row[key];
 
-          // If value is already a Date object, format it
-          if (typeof value === 'object' && value !== null && value instanceof Date && !isNaN(value.getTime())) {
-            newRow[mappedKey] = formatDateToDDMMYYYY(value);
-          }
-          // Otherwise, if it's a number and for 'ngay-tao', convert from Excel serial
-          else if (mappedKey === 'ngay-tao' && typeof value === 'number') {
-            newRow[mappedKey] = formatDateToDDMMYYYY(excelDateToJSDate(value));
+          // Xử lý ngày tháng cho tất cả các giá trị
+          if (value !== null && value !== undefined) {
+            // Nếu là Date object từ Excel
+            if (value instanceof Date && !isNaN(value.getTime())) {
+              newRow[mappedKey] = formatDateToDDMMYYYY(value);
+            }
+            // Nếu là number (có thể là Excel serial date)
+            else if (typeof value === 'number') {
+              // Kiểm tra nếu có thể là Excel date (số từ 1 đến 100000)
+              if (value > 1 && value < 100000) {
+                newRow[mappedKey] = formatDateToDDMMYYYY(value);
+              } else {
+                newRow[mappedKey] = value;
+              }
+            }
+            // Nếu là string, kiểm tra có phải ngày tháng không
+            else if (typeof value === 'string') {
+              const trimmedValue = value.trim();
+              // Kiểm tra các pattern ngày tháng phổ biến
+              if (
+                /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(trimmedValue) || // dd/mm/yy hoặc dd/mm/yyyy
+                /^\d{1,2}-\d{1,2}-\d{2,4}$/.test(trimmedValue) || // dd-mm-yy hoặc dd-mm-yyyy
+                /^\d{4}-\d{1,2}-\d{1,2}$/.test(trimmedValue) || // yyyy-mm-dd
+                /^\d{1,2}\.\d{1,2}\.\d{2,4}$/.test(trimmedValue) // dd.mm.yy hoặc dd.mm.yyyy
+              ) {
+                newRow[mappedKey] = formatDateToDDMMYYYY(trimmedValue);
+              } else {
+                newRow[mappedKey] = value;
+              }
+            }
+            // Các kiểu dữ liệu khác
+            else {
+              newRow[mappedKey] = value;
+            }
           } else {
             newRow[mappedKey] = value;
           }
@@ -506,7 +546,7 @@ export default function HomePage() {
 
         toast.success('Tải dữ liệu thành công!');
         if (fileInputRef.current) {
-          fileInputRef.current.value = ''; 
+          fileInputRef.current.value = '';
         }
         setFile(null);
         setSettingsDrawerVisible(false);
@@ -618,85 +658,96 @@ export default function HomePage() {
 
   // Hàm xóa dòng
   const handleDeleteRow = async (rowId: string) => {
-    const confirmed = window.confirm(
-      'Bạn có chắc chắn muốn xóa dòng này không?'
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/upload/${rowId}`, {
-        method: 'DELETE',
-      });
-
-      const result = await res.json();
-
-      if (res.ok) {
-        toast.success('Xóa dòng thành công!');
-
-        // Load lại dữ liệu từ database sau khi xóa thành công
-        await fetchDataRows();
-
-        // Clear dataColumn vì dữ liệu mới upload sẽ được load lại
-        setDataColumn([]);
+    Swal.fire({
+      title: 'Xác nhận',
+      text: 'Bạn có chắc chắn muốn xóa dòng dữ liệu này không?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Đồng ý',
+      cancelButtonText: 'Hủy',
+    }).then(async (result) => {
+      if (!result.isConfirmed) {
+        return;
       } else {
-        toast.error(result.message || 'Lỗi khi xóa dòng');
+        try {
+          const res = await fetch(`/api/upload/${rowId}`, {
+            method: 'DELETE',
+          });
+
+          const result = await res.json();
+
+          if (res.ok) {
+            toast.success('Xóa dữ liệu thành công!');
+
+            // Load lại dữ liệu từ database sau khi xóa thành công
+            await fetchDataRows();
+
+            // Clear dataColumn vì dữ liệu mới upload sẽ được load lại
+            setDataColumn([]);
+          } else {
+            toast.error(result.message || 'Lỗi khi xóa dòng');
+          }
+        } catch (error) {
+          console.error('Lỗi khi xóa:', error);
+          toast.error('Lỗi hệ thống khi xóa dòng');
+        }
       }
-    } catch (error) {
-      console.error('Lỗi khi xóa:', error);
-      toast.error('Lỗi hệ thống khi xóa dòng');
-    }
+    });
   };
 
   // Hàm xóa cột
   const handleDeleteColumn = async (columnId: string) => {
-    const confirmed = window.confirm(
-      'Bạn có chắc chắn muốn xóa cột này không?'
-    );
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/column/${columnId}`, {
-        method: 'DELETE',
-      });
-
-      const result = await res.json();
-
-      if (res.ok) {
-        toast.success('Xóa cột thành công!');
-
-        // Load lại danh sách cột từ database sau khi xóa thành công
-        const fetchColumns = async () => {
-          try {
-            const res = await fetch('/api/column');
-            const data = await res.json();
-            // Thêm cột actions vào cuối danh sách cột
-            const columnsWithActions = [
-              ...data,
-              {
-                id: 'actions',
-                label: 'AT',
-                type: 'actions',
-              },
-            ];
-            setColumns(columnsWithActions);
-          } catch (error) {
-            console.error('Failed to fetch columns:', error);
-          }
-        };
-
-        await fetchColumns();
+    Swal.fire({
+      title: 'Xác nhận',
+      text: 'Bạn có chắc chắn muốn xóa cột này không?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Đồng ý',
+      cancelButtonText: 'Hủy',
+    }).then(async (result) => {
+      if (!result.isConfirmed) {
+        return;
       } else {
-        toast.error(result.message || 'Lỗi khi xóa cột');
+        try {
+          const res = await fetch(`/api/column/${columnId}`, {
+            method: 'DELETE',
+          });
+
+          const result = await res.json();
+
+          if (res.ok) {
+            toast.success('Xóa cột thành công!');
+
+            // Load lại danh sách cột từ database sau khi xóa thành công
+            const fetchColumns = async () => {
+              try {
+                const res = await fetch('/api/column');
+                const data = await res.json();
+                // Thêm cột actions vào cuối danh sách cột
+                const columnsWithActions = [
+                  ...data,
+                  {
+                    id: 'actions',
+                    label: 'AT',
+                    type: 'actions',
+                  },
+                ];
+                setColumns(columnsWithActions);
+              } catch (error) {
+                console.error('Failed to fetch columns:', error);
+              }
+            };
+
+            await fetchColumns();
+          } else {
+            toast.error(result.message || 'Lỗi khi xóa cột');
+          }
+        } catch (error) {
+          console.error('Lỗi khi xóa:', error);
+          toast.error('Lỗi hệ thống khi xóa cột');
+        }
       }
-    } catch (error) {
-      console.error('Lỗi khi xóa:', error);
-      toast.error('Lỗi hệ thống khi xóa cột');
-    }
+    });
   };
 
   // Hàm logout
@@ -717,7 +768,7 @@ export default function HomePage() {
     setDrawerVisible(true);
     // Set form values
     const formValues: Record<string, any> = {};
-    columns.forEach(col => {
+    columns.forEach((col) => {
       if (col.id !== 'actions' && col.id !== 'stt') {
         formValues[col.id] = row[col.id] || '';
       }
@@ -736,7 +787,7 @@ export default function HomePage() {
   const handleCloseSettingsDrawer = () => {
     setSettingsDrawerVisible(false);
     setShowInput(false);
-    setNewColumnName(''); 
+    setNewColumnName('');
   };
 
   // Hàm lưu thay đổi
@@ -771,6 +822,32 @@ export default function HomePage() {
     }
   };
 
+  // Thêm hàm handleSubmitReport
+  const handleSubmitReport = async (values: any) => {
+    try {
+      const res = await fetch('/api/upload/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(values),
+      });
+      const result = await res.json();
+      if (res.ok) {
+        toast.success('Tạo báo cáo thành công!');
+        setReportModalVisible(false);
+        reportForm.resetFields();
+        await fetchDataRows(); // reload bảng
+      } else {
+        toast.error(result.message || 'Lỗi khi tạo báo cáo!');
+      }
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        toast.error(`Lỗi hệ thống: ${error.message}`);
+      } else {
+        toast.error('Lỗi hệ thống không xác định');
+      }
+    }
+  };
+
   return (
     <AuthGuard>
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-1 px-2 md:px-4">
@@ -798,7 +875,7 @@ export default function HomePage() {
                 <a
                   href="#"
                   className="text-blue-600 hover:underline font-medium"
-                  onClick={e => e.preventDefault()}
+                  onClick={(e) => e.preventDefault()}
                 >
                   <FontAwesomeIcon icon={faRightFromBracket} size="lg" />
                 </a>
@@ -862,11 +939,8 @@ export default function HomePage() {
           </div>
 
           {/* Table */}
-          <div className="overflow-x-auto max-h-[80vh] overflow-y-auto mt-1 rounded-lg shadow bg-white custom-scrollbar">
-            <DndContext
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-            >
+          <div className="overflow-x-auto max-h-[80vh] overflow-y-auto mt-1 rounded-lg shadow bg-white">
+            <DndContext collisionDetection={closestCenter}>
               <SortableContext
                 items={orderedColumns.map((col) => col.id)}
                 strategy={verticalListSortingStrategy}
@@ -912,7 +986,7 @@ export default function HomePage() {
                                   >
                                     <FontAwesomeIcon icon={faTrash} size="sm" />
                                   </button>
-                                  <button 
+                                  <button
                                     className="text-blue-600 flex items-center justify-center cursor-pointer"
                                     onClick={() => handleEditRow(row)}
                                   >
@@ -934,7 +1008,7 @@ export default function HomePage() {
                                     if (value instanceof Date) {
                                       return formatDateToDDMMYYYY(value);
                                     }
-                                    return value ?? 'null';
+                                    return value ?? '';
                                   })()}
                             </td>
                           )
@@ -943,8 +1017,8 @@ export default function HomePage() {
                     ))}
                     {filteredRows && filteredRows.length === 0 && (
                       <tr>
-                        <td 
-                          colSpan={orderedColumns.length} 
+                        <td
+                          colSpan={orderedColumns.length}
                           className="border px-3 py-8 text-center text-gray-500 bg-gray-50"
                         >
                           Không có dữ liệu phù hợp với tìm kiếm
@@ -956,7 +1030,6 @@ export default function HomePage() {
               </SortableContext>
             </DndContext>
           </div>
-
         </div>
 
         {/* Báo cáo thống kê */}
@@ -1017,7 +1090,9 @@ export default function HomePage() {
                           cx="50%"
                           cy="50%"
                           labelLine={false}
-                          label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                          label={({ percent }) =>
+                            `${(percent * 100).toFixed(0)}%`
+                          }
                           outerRadius={60}
                           fill="#8884d8"
                           dataKey="value"
@@ -1043,7 +1118,9 @@ export default function HomePage() {
                           cx="50%"
                           cy="50%"
                           labelLine={false}
-                          label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                          label={({ percent }) =>
+                            `${(percent * 100).toFixed(0)}%`
+                          }
                           outerRadius={60}
                           fill="#8884d8"
                           dataKey="value"
@@ -1069,7 +1146,9 @@ export default function HomePage() {
                           cx="50%"
                           cy="50%"
                           labelLine={false}
-                          label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                          label={({ percent }) =>
+                            `${(percent * 100).toFixed(0)}%`
+                          }
                           outerRadius={60}
                           fill="#8884d8"
                           dataKey="value"
@@ -1091,15 +1170,18 @@ export default function HomePage() {
 
         {/* Thống kê theo người phụ trách */}
         <div className="mt-6">
-          <Card title="Thống kê theo người phụ trách hồ sơ" className="shadow-lg">
+          <Card
+            title="Thống kê theo người phụ trách hồ sơ"
+            className="shadow-lg"
+          >
             <Row gutter={[16, 16]}>
               {statistics.staffStatistics.map((staff, index) => (
                 <Col xs={24} sm={12} key={index}>
-                  <Card 
-                    title={staff.staffName} 
+                  <Card
+                    title={staff.staffName}
                     className="text-center"
-                    style={{ 
-                      borderLeft: `4px solid ${staff.completionRate >= 80 ? '#52c41a' : staff.completionRate >= 50 ? '#faad14' : '#ff4d4f'}` 
+                    style={{
+                      borderLeft: `4px solid ${staff.completionRate >= 80 ? '#52c41a' : staff.completionRate >= 50 ? '#faad14' : '#ff4d4f'}`,
                     }}
                   >
                     <Row gutter={[8, 8]}>
@@ -1130,27 +1212,48 @@ export default function HomePage() {
                         title="Tỷ lệ hoàn thành"
                         value={staff.completionRate}
                         suffix="%"
-                        valueStyle={{ 
-                          color: staff.completionRate >= 80 ? '#52c41a' : staff.completionRate >= 50 ? '#faad14' : '#ff4d4f',
+                        valueStyle={{
+                          color:
+                            staff.completionRate >= 80
+                              ? '#52c41a'
+                              : staff.completionRate >= 50
+                                ? '#faad14'
+                                : '#ff4d4f',
                           fontSize: '20px',
-                          fontWeight: 'bold'
+                          fontWeight: 'bold',
                         }}
                       />
                     </div>
-                    
+
                     {/* Biểu đồ mini cho từng người */}
-                    <div style={{ width: '100%', height: '120px', marginTop: '10px' }}>
+                    <div
+                      style={{
+                        width: '100%',
+                        height: '120px',
+                        marginTop: '10px',
+                      }}
+                    >
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                           <Pie
                             data={[
-                              { name: 'Đã hoàn thành', value: staff.completed, color: '#52c41a' },
-                              { name: 'Chưa hoàn thành', value: staff.notCompleted, color: '#ff4d4f' }
+                              {
+                                name: 'Đã hoàn thành',
+                                value: staff.completed,
+                                color: '#52c41a',
+                              },
+                              {
+                                name: 'Chưa hoàn thành',
+                                value: staff.notCompleted,
+                                color: '#ff4d4f',
+                              },
                             ]}
                             cx="50%"
                             cy="50%"
                             labelLine={false}
-                            label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                            label={({ percent }) =>
+                              `${(percent * 100).toFixed(0)}%`
+                            }
                             outerRadius={40}
                             fill="#8884d8"
                             dataKey="value"
@@ -1177,7 +1280,7 @@ export default function HomePage() {
         width={600}
         onClose={handleCloseDrawer}
         open={drawerVisible}
-        footer={(
+        footer={
           <div style={{ textAlign: 'right' }}>
             <Space>
               <Button onClick={handleCloseDrawer}>Hủy</Button>
@@ -1186,23 +1289,22 @@ export default function HomePage() {
               </Button>
             </Space>
           </div>
-        )}
+        }
       >
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleSaveChanges}
-        >
+        <Form form={form} layout="vertical" onFinish={handleSaveChanges}>
           {columns
-            .filter(col => col.id !== 'actions' && col.id !== 'stt')
-            .map(col => (
-            <Form.Item
-          key={col.id}
-          label={<span style={{ fontWeight: 'bold' }}>{col.label}</span>}
-          name={col.id}
-        >
-          <Input placeholder={`Nhập ${col.label}`} style={{ width: '100%' }} />
-        </Form.Item>
+            .filter((col) => col.id !== 'actions' && col.id !== 'stt')
+            .map((col) => (
+              <Form.Item
+                key={col.id}
+                label={<span style={{ fontWeight: 'bold' }}>{col.label}</span>}
+                name={col.id}
+              >
+                <Input
+                  placeholder={`Nhập ${col.label}`}
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
             ))}
         </Form>
       </Drawer>
@@ -1214,17 +1316,19 @@ export default function HomePage() {
         width={400}
         onClose={handleCloseSettingsDrawer}
         open={settingsDrawerVisible}
-        footer={(
+        footer={
           <div style={{ textAlign: 'right' }}>
             <Space>
               <Button onClick={handleCloseSettingsDrawer}>Đóng</Button>
             </Space>
           </div>
-        )}
+        }
       >
         {/* Add New Column Section inside Drawer */}
         <div className="mb-6">
-          <h3 className="text-lg font-semibold mb-2">Thêm cột mới</h3>
+          <h3 className="text-lg font-semibold mb-2">
+            Thêm cột mới (cuối bảng)
+          </h3>
           {showInput ? (
             <div className="flex items-center gap-2">
               <Input
@@ -1280,15 +1384,43 @@ export default function HomePage() {
         <div>
           <h3 className="text-lg font-semibold mb-2">Mẫu và Báo cáo</h3>
           <div className="flex flex-col gap-2">
-            <Button onClick={handleDownloadTemplate}>
-              Download Template
-            </Button>
-            <Button>
+            <Button onClick={handleDownloadTemplate}>Download Template</Button>
+            <Button onClick={() => setReportModalVisible(true)}>
               Generate Report
             </Button>
           </div>
         </div>
       </Drawer>
+
+      {/* Modal nhập liệu Generate Report */}
+      <Modal
+        title="Nhập liệu báo cáo mới"
+        open={reportModalVisible}
+        onCancel={() => setReportModalVisible(false)}
+        footer={null}
+      >
+        <Form form={reportForm} layout="vertical" onFinish={handleSubmitReport}>
+          {columns
+            .filter((col) => col.id !== 'actions' && col.id !== 'stt')
+            .map((col) => (
+              <Form.Item
+                key={col.id}
+                label={<span style={{ fontWeight: 'bold' }}>{col.label}</span>}
+                name={col.id}
+              >
+                <Input placeholder={`Nhập ${col.label}`} />
+              </Form.Item>
+            ))}
+          <div style={{ textAlign: 'right' }}>
+            <Space>
+              <Button onClick={() => setReportModalVisible(false)}>Đóng</Button>
+              <Button type="primary" htmlType="submit">
+                Xác nhận
+              </Button>
+            </Space>
+          </div>
+        </Form>
+      </Modal>
     </AuthGuard>
   );
 }

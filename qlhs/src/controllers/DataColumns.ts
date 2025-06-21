@@ -106,3 +106,16 @@ export async function updateRowController(
     };
   }
 }
+
+export async function manualDataController(req: Request): Promise<{ status: number; body: any }> {
+  try {
+    const data = await req.json();
+    if (!data || typeof data !== 'object') {
+      return { status: 400, body: { message: 'Dữ liệu không hợp lệ' } };
+    }
+    const inserted = await dataService.insertRow(data);
+    return { status: 200, body: inserted };
+  } catch (error: any) {
+    return { status: 500, body: { message: error.message || 'Lỗi server' } };
+  }
+}

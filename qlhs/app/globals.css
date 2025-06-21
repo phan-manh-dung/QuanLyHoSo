@@ -30,8 +30,9 @@ body {
 /* Custom scrollbar for table */
 .custom-scrollbar::-webkit-scrollbar {
   width: 1px;
+  height: 8px;
   background: transparent;
-  display: none;
+  /* display: none; */ /* Bỏ ẩn scrollbar ngang */
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: #e0e7ef;

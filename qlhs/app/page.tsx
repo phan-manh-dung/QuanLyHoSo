@@ -37,7 +37,7 @@ export default function LoginPage() {
 
         toast.success('Đăng nhập thành công!');
         
-        // Navigate sang trang /home
+        // Chuyển trang ngay lập tức, không đợi toast
         router.push('/home');
       } else {
         toast.error(data.error || 'Đăng nhập thất bại');
