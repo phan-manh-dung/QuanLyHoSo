@@ -1,2 +1,2 @@
 # QuanLyHoSo
-Quản lý hồ sơ cho doanh nghiệp
+Quản lý hồ sơ bằng nextjs
