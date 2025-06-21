@@ -42,6 +42,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import toast from 'react-hot-toast';
 import { formatDateToDDMMYYYY } from '../../src/utils';
+import { useAuth } from '../../src/contexts/AuthContext';
 
 // Type for all columns
 interface ColumnType {
@@ -123,7 +124,6 @@ export default function HomePage() {
   const [searchColumn, setSearchColumn] = useState<string>('');
   const [searchValue, setSearchValue] = useState<string>('');
   const [filteredRows, setFilteredRows] = useState<DataRow[] | null>(null);
-  const [userData, setUserData] = useState<any>(null);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [selectedRow, setSelectedRow] = useState<DataRow | null>(null);
   const [form] = Form.useForm();
@@ -133,10 +133,11 @@ export default function HomePage() {
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [reportForm] = Form.useForm();
 
-    // biến check admin để xác định quyền của user
+  const { user, logout } = useAuth();
+  // biến check admin để xác định quyền của user
   const idAd = process.env.NEXT_PUBLIC_ID_ADMIN;
   const checkAdmin =
-    userData?.username === 'admin' && userData?.role === 'adminql' && idAd
+    user?.username === 'admin' && user?.role === 'adminql' && idAd
       ? true
       : false;
 
@@ -332,49 +333,31 @@ export default function HomePage() {
     initializeData();
   }, []);
 
-  // Lấy thông tin user từ localStorage
-  useEffect(() => {
-    const userId = localStorage.getItem('userId');
-    const username = localStorage.getItem('username');
-    const role = localStorage.getItem('role');
-
-    if (userId && username) {
-      setUserData({
-        userId,
-        username,
-        role: role || 'user',
-      });
-    }
-  }, []);
-
   // Hàm thêm cột mới
   const handleAddColumn = async () => {
     const trimmed = newColumnName.trim();
-
     if (!trimmed) {
       toast('Tên cột không được để trống!');
       return;
     }
-
     try {
+      const accessToken = localStorage.getItem('accessToken');
       const res = await fetch('/api/column', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
           id: Date.now().toString(),
           label: trimmed,
         }),
       });
-
       if (!res.ok) {
         const errData = await res.json();
-        throw new Error(errData.message || 'Lỗi khi thêm cột');
+        throw new Error(errData.message || errData.error || 'Lỗi khi thêm cột');
       }
-
       const newCol = await res.json();
-
       setColumns((prev) => {
         const lastCol = prev[prev.length - 1];
         const newList =
@@ -383,12 +366,11 @@ export default function HomePage() {
             : [...prev, newCol];
         return newList;
       });
-
       toast.success('Thêm cột thành công!');
       setNewColumnName('');
       setShowInput(false);
-    } catch (error) {
-      toast.error(`Lỗi: ${error}`);
+    } catch (error: any) {
+      toast.error(`Lỗi: ${error.message || error}`);
     }
   };
 
@@ -441,9 +423,7 @@ export default function HomePage() {
       toast('Vui lòng chọn một file Excel');
       return;
     }
-
     const reader = new FileReader();
-
     reader.onload = async (e) => {
       const data = e.target?.result;
       const workbook = XLSX.read(data, { type: 'binary', cellDates: true });
@@ -515,10 +495,12 @@ export default function HomePage() {
       });
 
       try {
+        const accessToken = localStorage.getItem('accessToken');
         const res = await fetch('/api/upload', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
           },
           body: JSON.stringify(jsonWithMappedKeys),
         });
@@ -555,7 +537,6 @@ export default function HomePage() {
         toast.error('Lỗi hệ thống!');
       }
     };
-
     reader.readAsBinaryString(file);
   };
 
@@ -670,8 +651,13 @@ export default function HomePage() {
         return;
       } else {
         try {
+          const accessToken = localStorage.getItem('accessToken');
           const res = await fetch(`/api/upload/${rowId}`, {
             method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
+            },
           });
 
           const result = await res.json();
@@ -709,8 +695,13 @@ export default function HomePage() {
         return;
       } else {
         try {
+          const accessToken = localStorage.getItem('accessToken');
           const res = await fetch(`/api/column/${columnId}`, {
             method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
+            },
           });
 
           const result = await res.json();
@@ -752,12 +743,7 @@ export default function HomePage() {
 
   // Hàm logout
   const handleLogout = () => {
-    localStorage.removeItem('userId');
-    localStorage.removeItem('username');
-    localStorage.removeItem('role');
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-
+    logout();
     toast.success('Đã đăng xuất');
     window.location.href = '/';
   };
@@ -796,12 +782,13 @@ export default function HomePage() {
       toast.error('Không tìm thấy ID của dòng dữ liệu');
       return;
     }
-
     try {
+      const accessToken = localStorage.getItem('accessToken');
       const res = await fetch(`/api/upload/${selectedRow._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({ values }),
       });
@@ -825,9 +812,13 @@ export default function HomePage() {
   // Thêm hàm handleSubmitReport
   const handleSubmitReport = async (values: any) => {
     try {
+      const accessToken = localStorage.getItem('accessToken');
       const res = await fetch('/api/upload/manual', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: JSON.stringify(values),
       });
       const result = await res.json();
@@ -862,7 +853,7 @@ export default function HomePage() {
                 <span className="text-sm">Xin chào: </span>
                 <span className="font-semibold text-blue-700">
                   {' '}
-                  {userData?.username}
+                  {user?.username}
                 </span>
               </span>
               <span className="mx-1">|</span>

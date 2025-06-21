@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
-
+import { useAuth } from '../src/contexts/AuthContext';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -11,6 +11,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const { login } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,12 +29,8 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (data.success) {
-        // Lưu thông tin user vào localStorage
-        localStorage.setItem('userId', data.data.user.id);
-        localStorage.setItem('username', data.data.user.username);
-        localStorage.setItem('role', data.data.user.role);
-        localStorage.setItem('accessToken', data.data.accessToken);
-        localStorage.setItem('refreshToken', data.data.refreshToken);
+        // Sử dụng AuthContext để login
+        login(data.data.accessToken, data.data.refreshToken);
 
         toast.success('Đăng nhập thành công!');
         

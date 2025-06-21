@@ -9,7 +9,6 @@ if (!URL_DATABASE_MONGODB_TEST) {
 export async function connectToDatabase() {
   try {
     await mongoose.connect(URL_DATABASE_MONGODB_TEST);
-    console.log("✅ MongoDB connected successfully");
   } catch (error) {
     console.error("❌ MongoDB connection error:", error);
   }
