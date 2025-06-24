@@ -83,3 +83,22 @@ export async function deleteColumnController(
     };
   }
 }
+
+// Đổi tên cột (label) theo id
+export async function renameColumnController(req: Request): Promise<ApiResponse<ColumnData | ErrorResponse>> {
+  try {
+    const data = await req.json();
+    const { id, newLabel } = data;
+    if (!id || !newLabel) {
+      return { status: 400, body: { message: 'id and newLabel are required' } };
+    }
+    const updatedColumn = await columnService.renameColumn(id, newLabel);
+    return { status: 200, body: updatedColumn };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Internal Server Error';
+    return {
+      status: 500,
+      body: { message: errorMessage },
+    };
+  }
+}

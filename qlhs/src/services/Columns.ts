@@ -30,3 +30,16 @@ export async function deleteColumn(id: string) {
   
   return deletedColumn;
 }
+
+// Đổi tên cột (label) theo id
+export async function renameColumn(id: string, newLabel: string) {
+  const updatedColumn = await Column.findOneAndUpdate(
+    { id },
+    { label: newLabel },
+    { new: true }
+  );
+  if (!updatedColumn) {
+    throw new Error('Column not found');
+  }
+  return updatedColumn;
+}
