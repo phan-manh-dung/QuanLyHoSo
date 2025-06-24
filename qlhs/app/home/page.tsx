@@ -72,10 +72,12 @@ interface ApiResponseItem {
 function SortableHeader({
   column,
   onDeleteColumn,
+  onRenameColumn,
   checkAdmin,
 }: {
   column: ColumnType;
   onDeleteColumn: (id: string) => void;
+  onRenameColumn: (id: string, currentLabel: string) => void;
   checkAdmin: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
@@ -97,17 +99,30 @@ function SortableHeader({
           <span>{column.label}</span>
         </div>
         {checkAdmin && column.id !== 'actions' && column.id !== 'stt' && (
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onDeleteColumn(column.id);
-            }}
-            className="ml-2 text-red-600 hover:text-red-800 p-1 rounded z-20 relative"
-            title="Xóa cột"
-          >
-            <FontAwesomeIcon icon={faTrash} size="xs" />
-          </button>
+          <div className="flex flex-col items-center gap-1 ">
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onRenameColumn(column.id, column.label);
+              }}
+              className="text-blue-600 hover:text-blue-800 p-1 rounded z-20 relative cursor-pointer"
+              title="Đổi tên cột"
+            >
+              <FontAwesomeIcon icon={faPen} size="xs" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onDeleteColumn(column.id);
+              }}
+              className="text-red-600 hover:text-red-800 p-1 rounded z-20 relative"
+              title="Xóa cột"
+            >
+              <FontAwesomeIcon icon={faTrash} size="xs" />
+            </button>
+          </div>
         )}
       </div>
     </th>
@@ -132,6 +147,10 @@ export default function HomePage() {
   const [settingsDrawerVisible, setSettingsDrawerVisible] = useState(false);
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [reportForm] = Form.useForm();
+  const [renameModalVisible, setRenameModalVisible] = useState(false);
+  const [renameColumnId, setRenameColumnId] = useState<string | null>(null);
+  const [renameColumnLabel, setRenameColumnLabel] = useState('');
+  const [renameInput, setRenameInput] = useState('');
 
   const { user, logout } = useAuth();
   // biến check admin để xác định quyền của user
@@ -839,6 +858,51 @@ export default function HomePage() {
     }
   };
 
+  // Hàm mở modal đổi tên cột
+  const handleOpenRenameModal = (id: string, currentLabel: string) => {
+    setRenameColumnId(id);
+    setRenameColumnLabel(currentLabel);
+    setRenameInput(currentLabel);
+    setRenameModalVisible(true);
+  };
+
+  // Hàm xác nhận đổi tên cột
+  const handleConfirmRename = async () => {
+    if (!renameColumnId || !renameInput.trim()) {
+      toast.error('Tên cột không được để trống!');
+      return;
+    }
+    try {
+      const accessToken = localStorage.getItem('accessToken');
+      const res = await fetch('/api/column', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ id: renameColumnId, newLabel: renameInput.trim() }),
+      });
+      const result = await res.json();
+      if (res.ok) {
+        toast.success('Đổi tên cột thành công!');
+        // Reload columns
+        const columnsRes = await fetch('/api/column');
+        const columnsData = await columnsRes.json();
+        const columnsWithSttAndActions = [
+          { id: 'stt', label: 'STT', type: 'stt' },
+          ...columnsData,
+          { id: 'actions', label: 'AT', type: 'actions' },
+        ];
+        setColumns(columnsWithSttAndActions);
+        setRenameModalVisible(false);
+      } else {
+        toast.error(result.message || 'Lỗi khi đổi tên cột!');
+      }
+    } catch {
+      toast.error('Lỗi hệ thống khi đổi tên cột!');
+    }
+  };
+
   return (
     <AuthGuard>
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-1 px-2 md:px-4">
@@ -951,8 +1015,9 @@ export default function HomePage() {
                           <SortableHeader
                             key={column.id}
                             column={column}
-                            checkAdmin={checkAdmin}
                             onDeleteColumn={handleDeleteColumn}
+                            onRenameColumn={handleOpenRenameModal}
+                            checkAdmin={checkAdmin}
                           />
                         )
                       )}
@@ -965,10 +1030,10 @@ export default function HomePage() {
                           col.id === 'actions' ? (
                             <td
                               key={col.id}
-                              className="px-0 py-2 flex items-center justify-center gap-1 flex-nowrap "
+                              className="px-0 py-2 flex flex-col items-center justify-center gap-1"
                             >
                               {checkAdmin && (
-                                <div className="flex gap-1">
+                                <div className="gap-4 items-center flex flex-col">
                                   <button
                                     className="text-red-600 flex items-center justify-center cursor-pointer"
                                     onClick={() =>
@@ -1411,6 +1476,24 @@ export default function HomePage() {
             </Space>
           </div>
         </Form>
+      </Modal>
+
+      {/* Modal đổi tên cột */}
+      <Modal
+        title="Đổi tên cột"
+        open={renameModalVisible}
+        onCancel={() => setRenameModalVisible(false)}
+        onOk={handleConfirmRename}
+        okText="Xác nhận"
+        cancelText="Hủy"
+      >
+        <div className="mb-2 font-medium">Tên cột hiện tại: <span className="text-blue-700">{renameColumnLabel}</span></div>
+        <Input
+          value={renameInput}
+          onChange={e => setRenameInput(e.target.value)}
+          placeholder="Nhập tên cột mới"
+          maxLength={50}
+        />
       </Modal>
     </AuthGuard>
   );

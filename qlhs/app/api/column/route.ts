@@ -1,4 +1,4 @@
-import { createColumn,getColumns  } from '../../../src/controllers/Columns';
+import { createColumn,getColumns, renameColumnController } from '../../../src/controllers/Columns';
 import { NextResponse, NextRequest } from 'next/server';
 import { connectToDatabase } from '../../../src/configs/db';
 import { requireAdmin } from '../../../src/middleware/admin';
@@ -18,5 +18,16 @@ export async function POST(req: Request) {
 export async function GET() {
   await connectToDatabase();
   const { status, body } = await getColumns();
+  return NextResponse.json(body, { status });
+}
+
+// PATCH - Đổi tên cột (chỉ admin)
+export async function PATCH(req: Request) {
+  // Kiểm tra quyền admin
+  const adminCheck = requireAdmin(req as unknown as NextRequest);
+  if (adminCheck) return adminCheck;
+
+  await connectToDatabase();
+  const { status, body } = await renameColumnController(req);
   return NextResponse.json(body, { status });
 }
