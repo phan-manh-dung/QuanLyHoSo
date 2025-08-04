@@ -4,9 +4,11 @@ import {
   updateRowController,
 } from '../../../../src/controllers/DataColumns';
 import { requireAdmin } from '../../../../src/middleware/admin';
+import { connectToDatabase } from '../../../../src/configs/db';
 
 // Xử lý DELETE cho việc xóa dữ liệu của cột
 export async function DELETE(req: NextRequest) {
+  await connectToDatabase();
   const adminCheck = requireAdmin(req as unknown as NextRequest);
   if (adminCheck) {
     return adminCheck;
@@ -30,6 +32,7 @@ export async function DELETE(req: NextRequest) {
 
 // Xử lý PUT cho việc cập nhật dữ liệu của cột
 export async function PUT(req: NextRequest) {
+  await connectToDatabase();
   const adminCheck = requireAdmin(req as unknown as NextRequest);
   if (adminCheck) {
     return adminCheck;

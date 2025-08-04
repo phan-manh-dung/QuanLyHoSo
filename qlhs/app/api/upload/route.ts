@@ -2,9 +2,11 @@ import { NextResponse, NextRequest } from 'next/server';
 import { insertRows } from '../../../src/services/DataColumns';
 import { getDataRow } from '../../../src/controllers/DataColumns';
 import { requireAdmin } from '../../../src/middleware/admin';
+import { connectToDatabase } from '../../../src/configs/db';
 
 // POST - Thêm dữ liệu vào cột (chỉ admin)
 export async function POST(req: Request) {
+  await connectToDatabase();
   try {
     // Kiểm tra quyền admin
     const adminCheck = requireAdmin(req as unknown as NextRequest);
@@ -24,6 +26,7 @@ export async function POST(req: Request) {
 
 // GET - Lấy danh sách tất cả data của cột
 export async function GET() {
+  await connectToDatabase();
   try {
     const result = await getDataRow();
     return NextResponse.json(result.body, { status: result.status });

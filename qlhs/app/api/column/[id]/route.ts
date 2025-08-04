@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteColumnController } from '../../../../src/controllers/Columns';
 import { requireAdmin } from '../../../../src/middleware/admin';
+import { connectToDatabase } from '../../../../src/configs/db';
 
 // Xử lý yêu cầu DELETE để xóa một cột theo ID
 export async function DELETE(req: NextRequest) {
+  await connectToDatabase();
   // Kiểm tra quyền admin
   const adminCheck = requireAdmin(req as unknown as NextRequest);
   if (adminCheck) return adminCheck 
