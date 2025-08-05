@@ -1,11 +1,10 @@
 import * as dataService from '../services/DataColumns';
-import { Schema } from 'mongoose';
 import { deleteRow, updateRow } from '../services/DataColumns';
 
 interface ColumnData {
   id: string;
   label: string;
-  type?: Schema.Types.Mixed;
+  type?: string;
 }
 
 interface ApiResponse<T> {

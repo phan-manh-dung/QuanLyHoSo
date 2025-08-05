@@ -1,6 +1,6 @@
 import { createColumn,getColumns, renameColumnController } from '../../../src/controllers/Columns';
 import { NextResponse, NextRequest } from 'next/server';
-import { connectToDatabase } from '../../../src/configs/db';
+import { connectToDatabase } from '../../../src/configs/database';
 import { requireAdmin } from '../../../src/middleware/admin';
 
 // POST - Tạo cột mới (chỉ admin)

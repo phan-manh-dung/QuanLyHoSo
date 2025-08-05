@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import UserService, { LoginCredentials, RegisterData } from '../services/User';
-import { connectToDatabase } from '../configs/db';
+import AuthService, { LoginCredentials, RegisterData } from '../services/Auth';
+import { 
+  findUserByIdUser, 
+  updateUser, 
+  getAllUsers 
+} from '../services/User';
+import { connectToDatabase } from '../configs/database';
 
 class UserController {
   // Đăng nhập
@@ -19,7 +24,7 @@ class UserController {
         );
       }
 
-      const result = await UserService.login({ username, password });
+      const result = await AuthService.login({ username, password });
 
       return NextResponse.json({
         success: true,
@@ -27,10 +32,11 @@ class UserController {
         data: result,
       });
     } catch (error: any) {
+      console.error('Login error:', error);
       return NextResponse.json(
         { 
           success: false,
-          error: error.message || 'Đăng nhập thất bại' 
+          error: 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.' 
         },
         { status: 400 }
       );
@@ -61,7 +67,7 @@ class UserController {
         );
       }
 
-      const result = await UserService.register({
+      const result = await AuthService.register({
         username,
         password,
         role,
@@ -73,10 +79,11 @@ class UserController {
         data: result,
       });
     } catch (error: any) {
+      console.error('Register error:', error);
       return NextResponse.json(
         { 
           success: false,
-          error: error.message || 'Đăng ký thất bại' 
+          error: 'Đăng ký thất bại. Vui lòng thử lại.' 
         },
         { status: 400 }
       );
@@ -98,7 +105,7 @@ class UserController {
         );
       }
 
-      const result = await UserService.refreshToken(refreshToken);
+      const result = await AuthService.refreshToken(refreshToken);
 
       return NextResponse.json({
         success: true,
@@ -106,10 +113,11 @@ class UserController {
         data: result,
       });
     } catch (error: any) {
+      console.error('Refresh token error:', error);
       return NextResponse.json(
         { 
           success: false,
-          error: error.message || 'Refresh token thất bại' 
+          error: 'Refresh token thất bại' 
         },
         { status: 400 }
       );
@@ -130,9 +138,9 @@ class UserController {
       }
 
       const token = authHeader.substring(7);
-      const decoded = UserService.verifyAccessToken(token);
+      const decoded = AuthService.verifyAccessToken(token);
       
-      const user = await UserService.getUserById(decoded.userId);
+      const user = await findUserByIdUser(decoded.userId);
       if (!user) {
         return NextResponse.json(
           { error: 'User không tồn tại' },
@@ -152,10 +160,11 @@ class UserController {
         },
       });
     } catch (error: any) {
+      console.error('Get profile error:', error);
       return NextResponse.json(
         { 
           success: false,
-          error: error.message || 'Lấy thông tin profile thất bại' 
+          error: 'Lấy thông tin profile thất bại' 
         },
         { status: 401 }
       );
@@ -176,7 +185,7 @@ class UserController {
       }
 
       const token = authHeader.substring(7);
-      const decoded = UserService.verifyAccessToken(token);
+      const decoded = AuthService.verifyAccessToken(token);
       
       const body = await request.json();
       const { fullName } = body;
@@ -185,7 +194,7 @@ class UserController {
       const updateData: any = {};
       if (fullName) updateData.fullName = fullName;
 
-      const user = await UserService.updateUser(decoded.userId, updateData);
+      const user = await updateUser(decoded.userId, updateData);
       if (!user) {
         return NextResponse.json(
           { error: 'User không tồn tại' },
@@ -204,10 +213,11 @@ class UserController {
         },
       });
     } catch (error: any) {
+      console.error('Update profile error:', error);
       return NextResponse.json(
         { 
           success: false,
-          error: error.message || 'Cập nhật profile thất bại' 
+          error: 'Cập nhật profile thất bại' 
         },
         { status: 400 }
       );
@@ -228,31 +238,28 @@ class UserController {
       }
 
       const token = authHeader.substring(7);
-      const decoded = UserService.verifyAccessToken(token);
+      const decoded = AuthService.verifyAccessToken(token);
       
       // Kiểm tra quyền admin
-      if (decoded.role !== 'admin') {
+      if (decoded.role !== 'ADMINQL') {
         return NextResponse.json(
           { error: 'Không có quyền truy cập' },
           { status: 403 }
         );
       }
 
-      const { searchParams } = new URL(request.url);
-      const page = parseInt(searchParams.get('page') || '1');
-      const limit = parseInt(searchParams.get('limit') || '10');
-
-      const result = await UserService.getUsers(page, limit);
+      const result = await getAllUsers();
 
       return NextResponse.json({
         success: true,
         data: result,
       });
     } catch (error: any) {
+      console.error('Get users error:', error);
       return NextResponse.json(
         { 
           success: false,
-          error: error.message || 'Lấy danh sách users thất bại' 
+          error: 'Lấy danh sách users thất bại' 
         },
         { status: 400 }
       );

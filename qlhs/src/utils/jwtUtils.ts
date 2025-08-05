@@ -64,7 +64,7 @@ export const getUserFromToken = (token: string) => {
  */
 export const isAdmin = (token: string): boolean => {
   const user = getUserFromToken(token);
-  return user?.role === 'adminql' && user?.username === 'admin';
+  return user?.role === 'ADMINQL';
 };
 
 /**

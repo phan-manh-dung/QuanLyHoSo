@@ -1,12 +1,11 @@
 import slugify from 'slugify';
 import * as columnService from '../services/Columns';
-import { Schema } from 'mongoose';
 
 // Define proper types for the response
 interface ColumnData {
   id: string;
   label: string;
-  type?: Schema.Types.Mixed;
+  type?: string;
 }
 
 interface ApiResponse<T> {
@@ -23,21 +22,58 @@ interface SuccessResponse {
   deletedColumn: ColumnData;
 }
 
+// Hàm tạo ID unique từ label
+async function generateUniqueId(label: string): Promise<string> {
+  const baseId = slugify(label, { lower: true, strict: true });
+  
+  // Kiểm tra xem ID đã tồn tại chưa
+  const existingColumns = await columnService.getAllColumns();
+  const existingIds = existingColumns.map(col => col.id);
+  
+  if (!existingIds.includes(baseId)) {
+    return baseId;
+  }
+  
+  // Nếu trùng, thêm số vào cuối
+  let counter = 1;
+  let newId = `${baseId}_${counter}`;
+  
+  while (existingIds.includes(newId)) {
+    counter++;
+    newId = `${baseId}_${counter}`;
+  }
+  
+  return newId;
+}
+
 export async function createColumn(
   req: Request
 ): Promise<ApiResponse<ColumnData | ErrorResponse>> {
   try {
-    const data = await req.json(); // đọc body json
+    const data = await req.json();
 
     if (!data.label) {
-      return { status: 400, body: { message: 'id and label are required' } };
+      return { status: 400, body: { message: 'Label là bắt buộc' } };
     }
 
-    // Tạo id từ label (chuyển sang dạng slug)
-    const id = slugify(data.label, { lower: true, strict: true });
+    // Kiểm tra label đã tồn tại chưa
+    const existingColumns = await columnService.getAllColumns();
+    const existingLabel = existingColumns.find(col => 
+      col.label.toLowerCase() === data.label.toLowerCase()
+    );
+    
+    if (existingLabel) {
+      return { 
+        status: 400, 
+        body: { message: `Cột "${data.label}" đã tồn tại` } 
+      };
+    }
+
+    // Tạo ID unique từ label
+    const id = await generateUniqueId(data.label);
 
     // Gọi service với id mới tạo
-    const newColumn = await columnService.addColumn({ ...data, id });
+    const newColumn = await columnService.createColumn({ ...data, id });
     return { status: 201, body: newColumn };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Internal Server Error';
@@ -90,9 +126,35 @@ export async function renameColumnController(req: Request): Promise<ApiResponse<
     const data = await req.json();
     const { id, newLabel } = data;
     if (!id || !newLabel) {
-      return { status: 400, body: { message: 'id and newLabel are required' } };
+      return { status: 400, body: { message: 'ID và newLabel là bắt buộc' } };
     }
-    const updatedColumn = await columnService.renameColumn(id, newLabel);
+    
+    // Kiểm tra label mới đã tồn tại chưa (trừ column hiện tại)
+    const existingColumns = await columnService.getAllColumns();
+    const existingLabel = existingColumns.find(col => 
+      col.id !== id && col.label.toLowerCase() === newLabel.toLowerCase()
+    );
+    
+    if (existingLabel) {
+      return { 
+        status: 400, 
+        body: { message: `Cột "${newLabel}" đã tồn tại` } 
+      };
+    }
+    
+    // Kiểm tra xem có nên đổi ID không
+    const currentColumn = existingColumns.find(col => col.id === id);
+    if (currentColumn) {
+      const newId = slugify(newLabel, { lower: true, strict: true });
+      const isIdChanged = newId !== id;
+      
+      if (isIdChanged) {
+        // Có thể thêm logic đổi ID ở đây nếu muốn
+        console.log(`⚠️ Warning: Label changed from "${currentColumn.label}" to "${newLabel}", but ID remains "${id}"`);
+      }
+    }
+    
+    const updatedColumn = await columnService.updateColumn(id, { label: newLabel });
     return { status: 200, body: updatedColumn };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Internal Server Error';

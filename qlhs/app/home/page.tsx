@@ -154,11 +154,9 @@ export default function HomePage() {
 
   const { user, logout } = useAuth();
   // biến check admin để xác định quyền của user
-  const idAd = process.env.NEXT_PUBLIC_ID_ADMIN;
+  //const idAd = process.env.NEXT_PUBLIC_ID_ADMIN;
   const checkAdmin =
-    user?.username === 'admin' && user?.role === 'adminql' && idAd
-      ? true
-      : false;
+    user?.username === 'admin' && user?.role === 'ADMINQL';
 
   // Khi render header và dữ liệu, sắp xếp lại columns để actions lên đầu
   const orderedColumns = React.useMemo(() => {
